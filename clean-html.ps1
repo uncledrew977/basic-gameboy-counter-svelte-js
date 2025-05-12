@@ -1,27 +1,34 @@
-$inputDir = "C:\Test\Output"
+# Load the HTML file
+$htmlPath = "C:\Path\To\yourfile.html"
+$html = Get-Content $htmlPath -Raw
 
-Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
-    $htmlPath = $_.FullName
-    $htmlContent = Get-Content $htmlPath -Raw
+# Remove class=""
+$html = $html -replace '\sclass=""', ''
 
-    Write-Host "Cleaning: $htmlPath"
+# Remove style="" unless it contains background:silver
+$html = $html -replace '\sstyle="((?:(?!background\s*:\s*silver)[^"])+)"', ''
 
-    # Remove class attributes (double-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '\sclass\s*=\s*"[^"]*"', '')
+# Function to strip attributes from tags inside <body>...</body>
+function Strip-Attributes-InBody {
+    param($htmlContent)
 
-    # Remove style attributes (double-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '\sstyle\s*=\s*"[^"]*"', '')
+    # Match content inside <body>...</body>
+    if ($htmlContent -match '(?s)(<body[^>]*>)(.*?)(</body>)') {
+        $bodyOpen = $matches[1]
+        $bodyContent = $matches[2]
+        $bodyClose = $matches[3]
 
-    # Remove HTML comments
-    $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
+        # Strip all attributes from tags in $bodyContent
+        $cleanBodyContent = $bodyContent -replace '<(\w+)(\s[^>]*?)?>', '<$1>'
 
-    # Remove empty span/div/font tags
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
-
-    # Remove empty lines
-    $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
-    $htmlContent = $htmlLines -join "`r`n"
-
-    # Save cleaned HTML
-    Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
+        return $htmlContent -replace [regex]::Escape($matches[0]), "$bodyOpen$cleanBodyContent$bodyClose"
+    } else {
+        return $htmlContent
+    }
 }
+
+# Strip all attributes from elements inside <body>
+$html = Strip-Attributes-InBody $html
+
+# Save the cleaned HTML
+$html | Set-Content "C:\Path\To\cleaned_output.html"
