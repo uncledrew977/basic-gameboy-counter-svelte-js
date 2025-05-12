@@ -1,25 +1,22 @@
-# Define paths
-$wordFilePath = "C:\Path\To\Your\Document.docx"
-$outputHtmlPath = "C:\Path\To\Output\Document.html"
+# Load the HTML file
+$htmlPath = "C:\Path\To\yourfile.html"
+$html = Get-Content $htmlPath -Raw -Encoding UTF8
 
-# Create Word application object
-$wordApp = New-Object -ComObject Word.Application
-$wordApp.Visible = $false
+# Normalize non-breaking spaces and Word formatting
+$html = $html -replace '\u00A0', ' '
+$html = $html -replace '&nbsp;', ' '
+$html = $html -replace '>\s+<', '><'  # Collapse tag whitespace
 
-# Open the Word document
-$document = $wordApp.Documents.Open($wordFilePath)
+# Step 1: Remove all attributes from all HTML tags
+$html = [regex]::Replace($html, '<(\w+)(\s[^>]*)?>', '<$1>')
 
-# Save as filtered HTML
-$document.SaveAs([ref] $outputHtmlPath, [ref] 10)  # 10 corresponds to wdFormatFilteredHTML
+# Step 2: Replace all inner text (between tags) with the letter A
+$html = [regex]::Replace($html, '(?<=>)([^<]+)(?=<)', {
+    param($m)
+    return 'A'
+})
 
-# Close the document and quit Word
-$document.Close()
-$wordApp.Quit()
-
-# Release COM objects
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($document) | Out-Null
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($wordApp) | Out-Null
-[System.GC]::Collect()
-[System.GC]::WaitForPendingFinalizers()
-
-Write-Output "Filtered HTML saved to: $outputHtmlPath"
+# Step 3: Save cleaned HTML
+$outputPath = "$env:TEMP\replaced_output.html"
+$html | Set-Content -Path $outputPath -Encoding UTF8
+Write-Output "Cleaned + replaced HTML saved to: $outputPath"
