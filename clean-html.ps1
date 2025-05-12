@@ -1,41 +1,49 @@
 Add-Type -AssemblyName 'System.Web'
 
-$inputDir = "C:\Path\To\Output\HTML"
+$inputDir = "C:\Path\To\Your\HTML\Files"
 
 Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $htmlPath = $_.FullName
     [string]$htmlContent = Get-Content $htmlPath -Raw
 
-    # Remove class attributes
-    $htmlContent = $htmlContent -replace '\sclass="[^"]*"', ''
+    Write-Host "Cleaning: $htmlPath"
 
-    # Remove lang attributes
-    $htmlContent = $htmlContent -replace '\slang="[^"]*"', ''
+    # Remove all class attributes (single or double quotes)
+    $htmlContent = $htmlContent -replace '\sclass\s*=\s*(".*?"|\'.*?\')', ''
 
-    # Preserve only style attributes that include background:silver
-    $htmlContent = $htmlContent -replace 'style="((?![^"]*background\s*:\s*silver)[^"]*)"', ''
+    # Remove all lang attributes
+    $htmlContent = $htmlContent -replace '\slang\s*=\s*(".*?"|\'.*?\')', ''
 
-    # Optional: normalize background:silver (remove other stuff in style)
+    # Remove style attributes unless they contain background:silver
+    $htmlContent = $htmlContent -replace 'style\s*=\s*"(?![^"]*background\s*:\s*silver)[^"]*"', ''
+
+    # Reduce style="... background:silver ..." to only background:silver
     $htmlContent = $htmlContent -replace 'style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
 
-    # Remove empty tags (e.g. <span></span>, <font></font>)
-    $htmlContent = $htmlContent -replace '<(span|font)[^>]*>\s*</\1>', ''
-
     # Replace <strong>/<em> with <b>/<i>
-    $htmlContent = $htmlContent -replace '<strong>', '<b>' -replace '</strong>', '</b>'
-    $htmlContent = $htmlContent -replace '<em>', '<i>' -replace '</em>', '</i>'
+    $htmlContent = $htmlContent -replace '<\s*strong\s*>', '<b>'
+    $htmlContent = $htmlContent -replace '<\s*/\s*strong\s*>', '</b>'
+    $htmlContent = $htmlContent -replace '<\s*em\s*>', '<i>'
+    $htmlContent = $htmlContent -replace '<\s*/\s*em\s*>', '</i>'
 
-    # Remove conditional Word comments and Word styles
+    # Remove empty spans, fonts, divs
+    $htmlContent = $htmlContent -replace '<(span|font|div)[^>]*>\s*</\1>', ''
+
+    # Remove Word-specific conditional comments
     $htmlContent = $htmlContent -replace '<!--\[if.*?endif\]-->', ''
+
+    # Remove Word <style> blocks
     $htmlContent = $htmlContent -replace '<style[^>]*>.*?</style>', ''
+
+    # Remove meta tags
     $htmlContent = $htmlContent -replace '<meta[^>]*>', ''
+
+    # Remove mso- styles (Microsoft Office)
     $htmlContent = $htmlContent -replace 'mso-[^:]+:[^;"]+;?', ''
 
-    # Trim excess whitespace
+    # Clean up whitespace
     $htmlContent = $htmlContent -replace '\s{2,}', ' '
 
-    # Save cleaned content
+    # Save cleaned HTML
     Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
-
-    Write-Host "Cleaned: $htmlPath"
 }
