@@ -7,16 +7,16 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     Write-Host "Cleaning: $htmlPath"
 
     # Remove all inline style attributes (double or single quoted)
-    $htmlContent = $htmlContent -replace '(?i)\s*style\s*=\s*(".*?"|\'.*?\')', ''
+    $htmlContent = $htmlContent -replace "(?i)\s*style\s*=\s*(\".*?\"|'.*?')", ""
 
     # Remove all class attributes (double or single quoted)
-    $htmlContent = $htmlContent -replace '(?i)\s*class\s*=\s*(".*?"|\'.*?\')', ''
+    $htmlContent = $htmlContent -replace "(?i)\s*class\s*=\s*(\".*?\"|'.*?')", ""
 
     # Remove empty tags like <span></span>, <div></div>, <font></font>
-    $htmlContent = $htmlContent -replace '(?i)<(span|div|font)[^>]*>\s*</\1>', ''
+    $htmlContent = $htmlContent -replace "(?i)<(span|div|font)[^>]*>\s*</\1>", ""
 
     # Remove HTML comments
-    $htmlContent = $htmlContent -replace '(?s)<!--.*?-->', ''
+    $htmlContent = $htmlContent -replace "(?s)<!--.*?-->", ""
 
     # Remove blank lines
     $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
