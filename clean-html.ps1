@@ -5,8 +5,8 @@ $html = Get-Content $htmlPath -Raw
 # Remove class=""
 $html = $html -replace '\sclass=""', ''
 
-# Remove style="" unless it contains background:silver
-$html = $html -replace '\sstyle="((?:(?!background\s*:\s*silver)[^"])+)"', ''
+# Remove style="..." unless it contains 'background:silver'
+$html = $html -replace '(\sstyle="(?![^"]*background\s*:\s*silver)[^"]*")', ''
 
 # Function to strip attributes from tags inside <body>...</body>
 function Strip-Attributes-InBody {
