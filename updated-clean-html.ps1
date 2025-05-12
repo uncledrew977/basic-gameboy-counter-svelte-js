@@ -1,4 +1,4 @@
-# Load the HTML file with UTF-8 encoding (handles BOM)
+# Load the HTML file (UTF-8 handles BOM safely)
 $htmlPath = "C:\Path\To\yourfile.html"
 $html = Get-Content $htmlPath -Encoding UTF8 -Raw
 
@@ -6,7 +6,7 @@ $html = Get-Content $htmlPath -Encoding UTF8 -Raw
 $html = $html -replace '\u00A0', ' '
 $html = $html -replace '&nbsp;', ' '
 
-# Step 1: Convert Word-style <p> list blocks into real HTML lists
+# Step 1: Convert Word-style list <p> elements to proper <ul>/<ol>/<li> (without bullet text)
 function Convert-WordLists {
     param($htmlContent)
 
@@ -30,22 +30,19 @@ function Convert-WordLists {
             $level = 0
         }
 
-        # Determine list type (ordered vs unordered)
-        $bulletMatch = [regex]::Match($innerHtml, '<span[^>]*>([a-zA-Z0-9]+)[\.\)]\s*<span[^>]*>.*?</span></span>')
-        $bullet = $bulletMatch.Groups[1].Value
-
-        if ($bullet -match '^\d+$' -or $bullet -match '^[a-zA-Z]+$') {
+        # Guess list type based on bullet-like prefix pattern
+        if ($innerHtml -match '<span[^>]*>[a-zA-Z0-9]+[\.\)]\s*<span[^>]*>') {
             $listType = 'ol'
         } else {
             $listType = 'ul'
         }
 
-        # Extract the actual list content (remove all tags except the text after the bullet)
-        $text = $innerHtml -replace '<span[^>]*>[a-zA-Z0-9]+\.\s*<span[^>]*>.*?</span></span>', ''
-        $text = $text -replace '<[^>]+>', ''
-        $itemText = $text.Trim()
+        # Strip bullet spans and all tags, keep just the clean item text
+        $textOnly = $innerHtml -replace '<span[^>]*>[a-zA-Z0-9]+[\.\)]\s*<span[^>]*>.*?</span></span>', ''
+        $textOnly = $textOnly -replace '<[^>]+>', ''
+        $itemText = $textOnly.Trim()
 
-        # Handle nesting
+        # Nesting logic
         while ($prevLevel -lt $level) {
             $output += ("<" + $listType + ">")
             $listStack += $listType
@@ -66,6 +63,7 @@ function Convert-WordLists {
         $output += ("<li>" + $itemText + "</li>")
     }
 
+    # Close any remaining open lists
     while ($listStack.Count -gt 0) {
         $lastList = $listStack[-1]
         $output += ("</" + $lastList + ">")
@@ -76,15 +74,15 @@ function Convert-WordLists {
         }
     }
 
-    # Remove original <p> blocks
+    # Remove matched list <p> blocks from original HTML
     $htmlContent = $htmlContent -replace $pattern, ''
     return $htmlContent + $output
 }
 
-# Step 2: Convert Word-style lists to real HTML lists
+# Step 2: Apply list conversion
 $html = Convert-WordLists $html
 
-# Step 3: Remove all attributes inside <body> (completely clean tags)
+# Step 3: Remove all attributes from elements inside <body>
 function Strip-AllAttributes-InBody {
     param($htmlContent)
 
@@ -93,19 +91,17 @@ function Strip-AllAttributes-InBody {
         $bodyContent = $matches[2]
         $bodyClose = $matches[3]
 
-        # Remove all attributes from all tags inside <body>
         $cleanBodyContent = [regex]::Replace($bodyContent, '<(\w+)(\s[^>]*)?>', '<$1>')
-
         return $htmlContent -replace [regex]::Escape($matches[0]), ($bodyOpen + $cleanBodyContent + $bodyClose)
     } else {
         return $htmlContent
     }
 }
 
-# Step 4: Clean <body> attributes
+# Step 4: Apply body cleanup
 $html = Strip-AllAttributes-InBody $html
 
-# Step 5: Save final cleaned HTML
+# Step 5: Save cleaned output
 $outputPath = "$env:TEMP\cleaned_output.html"
 $html | Set-Content -Path $outputPath -Encoding UTF8
 Write-Output "Cleaned HTML saved to: $outputPath"
