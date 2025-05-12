@@ -8,35 +8,36 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
+    # Normalize all tag and attribute case (lowercase)
+    $htmlContent = $htmlContent -replace '(?i)(<[^>]+>)', { $args[0].ToLower() }
+
     # Convert <strong>/<em> to <b>/<i>
-    $htmlContent = $htmlContent -replace "(?i)<\s*strong\s*>", "<b>"
-    $htmlContent = $htmlContent -replace "(?i)<\s*/\s*strong\s*>", "</b>"
-    $htmlContent = $htmlContent -replace "(?i)<\s*em\s*>", "<i>"
-    $htmlContent = $htmlContent -replace "(?i)<\s*/\s*em\s*>", "</i>"
+    $htmlContent = $htmlContent -replace "<strong>", "<b>"
+    $htmlContent = $htmlContent -replace "</strong>", "</b>"
+    $htmlContent = $htmlContent -replace "<em>", "<i>"
+    $htmlContent = $htmlContent -replace "</em>", "</i>"
 
-    # Remove all class and lang attributes (case-insensitive)
-    $htmlContent = $htmlContent -replace "(?i)\sclass\s*=\s*(""[^""]*""|'[^']*')", ""
-    $htmlContent = $htmlContent -replace "(?i)\slang\s*=\s*(""[^""]*""|'[^']*')", ""
+    # Keep only style="background:silver" and delete all other styles and class/lang
+    $htmlContent = $htmlContent -replace 'style="((?:(?!background\s*:\s*silver)[^""])+)"', ''
+    $htmlContent = $htmlContent -replace 'style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
+    $htmlContent = $htmlContent -replace '\sclass="[^"]*"', ''
+    $htmlContent = $htmlContent -replace '\slang="[^"]*"', ''
 
-    # Remove style unless it contains background:silver
-    $htmlContent = $htmlContent -replace '(?i)style\s*=\s*"(?:(?!background\s*:\s*silver)[^""])*"', ""
-    $htmlContent = $htmlContent -replace '(?i)style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
+    # Remove Word-specific comments and styles
+    $htmlContent = $htmlContent -replace "<!--\[if.*?\]-->", ""
+    $htmlContent = $htmlContent -replace "(?s)<style[^>]*>.*?</style>", ""
+    $htmlContent = $htmlContent -replace "<meta[^>]*>", ""
+    $htmlContent = $htmlContent -replace "mso-[^:]+:[^;""']+;?", ""
 
-    # Remove Office-specific styles/comments
-    $htmlContent = $htmlContent -replace "(?i)<!--\[if.*?endif\]-->", ""
-    $htmlContent = $htmlContent -replace "(?is)<style[^>]*>.*?</style>", ""
-    $htmlContent = $htmlContent -replace "(?i)<meta[^>]*>", ""
-    $htmlContent = $htmlContent -replace "(?i)mso-[^:]+:[^;""']+;?", ""
+    # Remove empty spans, fonts, divs
+    $htmlContent = $htmlContent -replace "<(span|font|div)[^>]*>\s*</\1>", ""
 
-    # Remove empty spans, fonts, and divs
-    $htmlContent = $htmlContent -replace "(?i)<(span|font|div)[^>]*>\s*</\1>", ""
+    # Remove any remaining empty inline elements
+    $htmlContent = $htmlContent -replace "<(span|font|div)[^>]*></\1>", ""
 
-    # Preserve <ol>, <ul>, <li> (with type attributes for roman/lettered/numbered)
-    # Do NOT touch any <ol.*?>, <ul.*?>, or <li> elements
-
-    # Collapse excessive whitespace
+    # Collapse multiple spaces
     $htmlContent = $htmlContent -replace "\s{2,}", " "
 
-    # Save cleaned HTML
+    # Write back cleaned content
     Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
 }
