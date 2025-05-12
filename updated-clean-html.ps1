@@ -1,28 +1,85 @@
-# Load the HTML file
-$htmlPath = "C:\Path\To\yourfile.html"
-$html = Get-Content $htmlPath -Raw -Encoding UTF8
+# Input and output paths
+$inputPath = "C:\Path\To\Test.html"
+$outputPath = "$env:TEMP\cleaned_lists.html"
 
-# Normalize Word artifacts
+# Read HTML
+$html = Get-Content $inputPath -Raw -Encoding UTF8
+
+# Normalize line breaks and spaces
 $html = $html -replace '\u00A0', ' '
 $html = $html -replace '&nbsp;', ' '
-$html = $html -replace '>\s+<', '><'  # Collapse whitespace between tags
+$html = $html -replace '>\s+<', '><'
 
-# Step 1: DO NOT strip attributes (leave tags untouched)
+# Regex to find list-like <p> blocks
+$pattern = '<p[^>]*?((MsoListParagraph)|margin-left:\s*\d+pt|text-indent)[^>]*?>(.*?)</p>'
 
-# Step 2: Replace all inner text with "X", except bullet-like markers
-$bulletPattern = '^\s*(\(?[a-z]{1,5}[\.\)\:]|\(?[ivxlcdm]{1,5}[\.\)\:]|\(?\d{1,4}[\.\)\:])\s*$'
+# Match all <p> blocks (including non-lists to preserve them)
+$allParagraphs = [regex]::Matches($html, '<p[^>]*?>.*?</p>', 'IgnoreCase')
 
-$html = [regex]::Replace($html, '(?<=>)([^<]+)(?=<)', {
-    param($m)
-    $text = $m.Groups[1].Value.Trim()
-    if ($text -match $bulletPattern) {
-        return $text  # Preserve bullet markers
-    } else {
-        return 'X'
+# Indentation unit to estimate nesting (Word uses ~36pt per level)
+$indentUnit = 36
+$listStack = @()
+$output = ""
+
+function Close-Lists {
+    param([int]$targetLevel)
+    while ($listStack.Count -gt $targetLevel) {
+        $tag = $listStack[-1]
+        $script:output += "</$tag>`n"
+        $listStack = $listStack[0..($listStack.Count - 2)]
     }
-})
+}
 
-# Save the output for inspection
-$outputPath = "$env:TEMP\test_output_with_attributes.html"
-$html | Set-Content -Path $outputPath -Encoding UTF8
-Write-Output "Output with original attributes saved to: $outputPath"
+function Open-List {
+    param($type)
+    $script:output += "<$type>`n"
+    $listStack += $type
+}
+
+foreach ($paraMatch in $allParagraphs) {
+    $p = $paraMatch.Value
+    $style = if ($p -match 'style="([^"]+)"') { $matches[1] } else { "" }
+
+    $level = 0
+    if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
+        $margin = [double]$matches[1]
+        $level = [math]::Round($margin / $indentUnit)
+    }
+
+    $isList = $p -match 'MsoListParagraph|margin-left:\s*\d+pt|text-indent'
+    $innerHtml = [regex]::Match($p, '>(.*?)</p>', 'Singleline').Groups[1].Value
+
+    if ($isList) {
+        # Detect ordered vs unordered by bullet shape
+        if ($innerHtml -match '<span[^>]*>[a-zA-Z0-9]+[\.\)\:]') {
+            $listType = "ol"
+        } else {
+            $listType = "ul"
+        }
+
+        # Strip bullet prefix span
+        $cleaned = [regex]::Replace($innerHtml, '<span[^>]*>[a-zA-Z0-9]+[\.\)\:](.*?)</span>', '', 'IgnoreCase')
+        $textOnly = [regex]::Replace($cleaned, '<[^>]+>', '').Trim()
+
+        # Open/close lists based on nesting level
+        Close-Lists -targetLevel:$level
+        if ($listStack.Count -lt ($level + 1)) {
+            Open-List -type:$listType
+        }
+
+        $output += "<li>$textOnly</li>`n"
+    }
+    else {
+        # Non-list <p> element: close all lists first
+        Close-Lists -targetLevel:0
+        $text = [regex]::Replace($innerHtml, '<[^>]+>', '').Trim()
+        $output += "<p>$text</p>`n"
+    }
+}
+
+# Close any remaining open lists
+Close-Lists -targetLevel:0
+
+# Write to file
+Set-Content -Path $outputPath -Value $output -Encoding UTF8
+Write-Output "Cleaned HTML with lists saved to: $outputPath"
