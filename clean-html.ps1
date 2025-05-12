@@ -6,14 +6,14 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove class attributes (double-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '\sclass\s*=\s*"[^"]*"', '')
+    # Remove class attributes (both quote types)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sclass\s*=\s*(".*?"|\'.*?\')', '')
 
-    # Remove style attributes (double-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '\sstyle\s*=\s*"[^"]*"', '')
+    # Remove style attributes that do NOT contain background:silver
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sstyle\s*=\s*("(?:(?!background\s*:\s*silver)[^"])*?"|\'(?:(?!background\s*:\s*silver)[^\'])*?\')', '')
 
     # Remove HTML comments
-    $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
+    $htmlContent = [regex]::Replace($htmlContent, '(?is)<!--.*?-->', '')
 
     # Remove empty span/div/font tags
     $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
