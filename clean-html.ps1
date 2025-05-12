@@ -9,29 +9,30 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     Write-Host "Cleaning: $htmlPath"
 
     # Convert <strong>/<em> to <b>/<i>
-    $htmlContent = $htmlContent -replace "<\s*strong\s*>", "<b>"
-    $htmlContent = $htmlContent -replace "<\s*/\s*strong\s*>", "</b>"
-    $htmlContent = $htmlContent -replace "<\s*em\s*>", "<i>"
-    $htmlContent = $htmlContent -replace "<\s*/\s*em\s*>", "</i>"
+    $htmlContent = $htmlContent -replace "(?i)<\s*strong\s*>", "<b>"
+    $htmlContent = $htmlContent -replace "(?i)<\s*/\s*strong\s*>", "</b>"
+    $htmlContent = $htmlContent -replace "(?i)<\s*em\s*>", "<i>"
+    $htmlContent = $htmlContent -replace "(?i)<\s*/\s*em\s*>", "</i>"
 
-    # Remove class and lang attributes
-    $htmlContent = $htmlContent -replace "\sclass\s*=\s*(""[^""]*""|'[^']*')", ""
-    $htmlContent = $htmlContent -replace "\slang\s*=\s*(""[^""]*""|'[^']*')", ""
+    # Remove all class and lang attributes (case-insensitive)
+    $htmlContent = $htmlContent -replace "(?i)\sclass\s*=\s*(""[^""]*""|'[^']*')", ""
+    $htmlContent = $htmlContent -replace "(?i)\slang\s*=\s*(""[^""]*""|'[^']*')", ""
 
-    # Keep only style="background:silver", remove all other styles
-    $htmlContent = $htmlContent -replace "style\s*=\s*""(?![^""]*background\s*:\s*silver)[^""]*""", ""
-    $htmlContent = $htmlContent -replace "style=""[^""]*(background\s*:\s*silver)[^""]*""", 'style="$1"'
+    # Remove style unless it contains background:silver
+    $htmlContent = $htmlContent -replace '(?i)style\s*=\s*"(?:(?!background\s*:\s*silver)[^""])*"', ""
+    $htmlContent = $htmlContent -replace '(?i)style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
 
-    # Remove Office-specific formatting
-    $htmlContent = $htmlContent -replace "<!--\[if.*?endif\]-->", ""
-    $htmlContent = $htmlContent -replace "<style[^>]*>.*?</style>", ""
-    $htmlContent = $htmlContent -replace "<meta[^>]*>", ""
-    $htmlContent = $htmlContent -replace "mso-[^:]+:[^;""']+;?", ""
+    # Remove Office-specific styles/comments
+    $htmlContent = $htmlContent -replace "(?i)<!--\[if.*?endif\]-->", ""
+    $htmlContent = $htmlContent -replace "(?is)<style[^>]*>.*?</style>", ""
+    $htmlContent = $htmlContent -replace "(?i)<meta[^>]*>", ""
+    $htmlContent = $htmlContent -replace "(?i)mso-[^:]+:[^;""']+;?", ""
 
-    # Remove empty spans, fonts, divs
-    $htmlContent = $htmlContent -replace "<(span|font|div)[^>]*>\s*</\1>", ""
+    # Remove empty spans, fonts, and divs
+    $htmlContent = $htmlContent -replace "(?i)<(span|font|div)[^>]*>\s*</\1>", ""
 
-    # Preserve nested and lettered lists — do NOT remove <ul>, <ol>, <li>, etc.
+    # Preserve <ol>, <ul>, <li> (with type attributes for roman/lettered/numbered)
+    # Do NOT touch any <ol.*?>, <ul.*?>, or <li> elements
 
     # Collapse excessive whitespace
     $htmlContent = $htmlContent -replace "\s{2,}", " "
