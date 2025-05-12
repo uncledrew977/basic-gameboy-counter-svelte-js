@@ -1,20 +1,14 @@
-param (
-    [string]$InputPath,
-    [string]$OutputPath
-)
+$inputDir = "C:\your\docx\folder"
+$outputDir = "C:\your\output\folder"
+$converterScript = "C:\your\output\convert-single.ps1"
 
-$word = New-Object -ComObject Word.Application
-$word.Visible = $false
-$word.DisplayAlerts = 0
+# Make sure output dir exists
+if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir | Out-Null }
 
-try {
-    $doc = $word.Documents.Open($InputPath, $false, $true)
-    $doc.SaveAs($OutputPath, 10)
-    $doc.Close()
-} catch {
-    Write-Warning "Failed: $InputPath - $_"
+Get-ChildItem -Path $inputDir -Filter *.docx | ForEach-Object {
+    $inputFile = $_.FullName
+    $outputFile = Join-Path $outputDir ($_.BaseName + ".html")
+
+    $cmd = "& `"$converterScript`" -InputPath `"$inputFile`" -OutputPath `"$outputFile`""
+    Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $cmd" -Wait -NoNewWindow
 }
-
-$word.Quit()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
-[GC]::Collect(); [GC]::WaitForPendingFinalizers()
