@@ -6,19 +6,13 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove all inline style attributes (double or single quoted)
-    $htmlContent = $htmlContent -replace "(?i)\s*style\s*=\s*(\".*?\"|'.*?')", ""
+    # Use verbatim strings to avoid quote and symbol issues
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*style\s*=\s*(".*?"|\'.*?\')', '')
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*class\s*=\s*(".*?"|\'.*?\')', '')
+    $htmlContent = [regex]::Replace($htmlContent, '(?is)<!--.*?-->', '')
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
 
-    # Remove all class attributes (double or single quoted)
-    $htmlContent = $htmlContent -replace "(?i)\s*class\s*=\s*(\".*?\"|'.*?')", ""
-
-    # Remove empty tags like <span></span>, <div></div>, <font></font>
-    $htmlContent = $htmlContent -replace "(?i)<(span|div|font)[^>]*>\s*</\1>", ""
-
-    # Remove HTML comments
-    $htmlContent = $htmlContent -replace "(?s)<!--.*?-->", ""
-
-    # Remove blank lines
+    # Remove empty or whitespace-only lines
     $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
     $htmlContent = $htmlLines -join "`r`n"
 
