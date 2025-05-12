@@ -1,78 +1,72 @@
-# Load raw HTML and normalize spacing
-$inputPath = "C:\Path\To\Test.html"
-$html = Get-Content $inputPath -Raw -Encoding UTF8
+# Path to the HTML file
+$htmlPath = "C:\Path\To\Test.html"
+$outputPath = "$env:TEMP\cleaned_with_lists.html"
 
-# Normalize line breaks and spaces (Word spreads tags across lines)
-$html = $html -replace '\r?\n', ' '
-$html = $html -replace '\u00A0', ' '
-$html = $html -replace '&nbsp;', ' '
-$html = $html -replace '>\s+<', '><'
+# Load HtmlAgilityPack
+$hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\netstandard2.0\HtmlAgilityPack.dll"
+Add-Type -Path $hpackDll
 
-# Match all <p> elements
-$paragraphs = [regex]::Matches($html, '<p[^>]*?>.*?</p>', 'IgnoreCase')
+# Load HTML content
+$html = Get-Content $htmlPath -Raw -Encoding UTF8
+$doc = New-Object HtmlAgilityPack.HtmlDocument
+$doc.LoadHtml($html)
 
-# Prepare output
-$output = ""
+# Constants
+$indentUnit = 36
 $listStack = @()
-$indentUnit = 36  # pt per indent level
 
-function Close-Lists($level) {
+function Close-Lists($level, [ref]$outputBuilder) {
     while ($listStack.Count -gt $level) {
-        $output += "</$($listStack[-1])>`n"
+        $closing = "</$($listStack[-1])>`n"
+        $outputBuilder.Value += $closing
         $listStack = $listStack[0..($listStack.Count - 2)]
     }
 }
 
-function Open-List($tag) {
-    $output += "<$tag>`n"
-    $listStack += $tag
+function Open-List($type, [ref]$outputBuilder) {
+    $outputBuilder.Value += "<$type>`n"
+    $listStack += $type
 }
 
-foreach ($match in $paragraphs) {
-    $p = $match.Value
-    $style = if ($p -match 'style="([^"]+)"') { $matches[1] } else { "" }
+# Builder for output HTML
+$outputBuilder = [ref] ''
 
-    # Estimate nesting level from margin-left
-    $level = 0
-    if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
-        $margin = [double]$matches[1]
-        $level = [math]::Round($margin / $indentUnit)
-    }
-
-    $isList = $p -match 'MsoListParagraph'
-
-    # Extract raw inner HTML
-    $innerHtml = [regex]::Match($p, '>(.*?)</p>', 'Singleline').Groups[1].Value
-
-    if ($isList) {
-        # Guess list type from bullet span
-        $listType = if ($innerHtml -match '<span[^>]*>[a-zA-Z0-9]+[\.\)\:]') { "ol" } else { "ul" }
-
-        # Strip bullet span (e.g., <span>1.<span>...</span></span>)
-        $cleaned = $innerHtml -replace '<span[^>]*>[a-zA-Z0-9]+[\.\)\:]\s*<span[^>]*>.*?</span></span>', ''
-        $cleaned = $cleaned -replace '<[^>]+>', ''
-        $text = $cleaned.Trim()
-
-        # Manage nesting
-        Close-Lists $level
-        if ($listStack.Count -lt ($level + 1)) {
-            Open-List $listType
+# Go through all top-level nodes
+foreach ($node in $doc.DocumentNode.SelectNodes("//*")) {
+    if ($node.Name -eq "p" -and $node.GetAttributeValue("class", "") -like "*MsoListParagraph*") {
+        $style = $node.GetAttributeValue("style", "")
+        $level = 0
+        if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
+            $margin = [double]$matches[1]
+            $level = [math]::Round($margin / $indentUnit)
         }
 
-        $output += "<li>$text</li>`n"
-    }
-    else {
-        # Not a list, just output as paragraph
-        Close-Lists 0
-        $text = $innerHtml -replace '<[^>]+>', ''
-        $output += "<p>$($text.Trim())</p>`n"
+        # Extract text, remove bullets
+        $text = $node.InnerText.Trim()
+        if ($text -match '^[a-zA-Z0-9]{1,5}[\.\)\:]\s*') {
+            $text = $text -replace '^[a-zA-Z0-9]{1,5}[\.\)\:]\s*', ''
+        }
+
+        # Determine list type
+        $listType = if ($node.InnerHtml -match '[a-zA-Z0-9]{1,5}[\.\)\:]') { "ol" } else { "ul" }
+
+        Close-Lists $level $outputBuilder
+        if ($listStack.Count -lt ($level + 1)) {
+            Open-List $listType $outputBuilder
+        }
+
+        $outputBuilder.Value += "<li>$text</li>`n"
+        $node.Remove()  # Remove from final output
     }
 }
 
-# Close any remaining open lists
-Close-Lists 0
+# Close remaining open lists
+Close-Lists 0 $outputBuilder
 
-# Save the result
-$outputPath = "$env:TEMP\cleaned_final_output.html"
-$output | Set-Content -Encoding UTF8 -Path $outputPath
-Write-Output "Final HTML with lists saved to: $outputPath"
+# Append remaining HTML after cleaned lists
+$remaining = $doc.DocumentNode.InnerHtml
+$outputBuilder.Value += "`n$remaining"
+
+# Save output
+Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
+Write-Output "Cleaned HTML with lists saved to: $outputPath"
