@@ -1,133 +1,21 @@
-# Configuration
-$inputDir = "C:\your\docx\folder"          
-$outputDir = "C:\your\output\folder"       
-$wdFormatFilteredHTML = 10                 # HTML format constant
-
-# Create output folder if needed
-if (-not (Test-Path $outputDir)) {
-    New-Item -ItemType Directory -Path $outputDir | Out-Null
-}
-
-# Launch Word COM
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
 
-# Process each DOCX file
-Get-ChildItem -Path $inputDir -Filter *.docx | ForEach-Object {
-    try {
-        $filePath = $_.FullName
-        $baseName = $_.BaseName.ToString()
-        $outputPath = Join-Path $outputDir ($baseName + ".html")
+$filePath = "C:\your\docx\folder\test.docx"  # Replace with your actual file path
+$outputPath = "C:\your\output\folder\test.html"
 
-        Write-Host "Processing: $filePath"
-
-        $doc = $word.Documents.Open($filePath, $false, $true)  # ReadOnly
-        $doc.SaveAs($outputPath, $wdFormatFilteredHTML)
-        $doc.Close()
-
-        Write-Host "Saved: $outputPath"
-
-        # Post-process HTML
-        $html = Get-Content $outputPath -Raw
-
-        # Clean unnecessary Word output
-        $html = $html -replace '<!--\[if gte mso .*?\]>', ''
-        $html = $html -replace '<meta name=Generator.*?>', ''
-        $html = $html -replace '<!--.*?-->', ''
-        $html = $html -replace 'xmlns:[^=]*="[^"]*"', ''
-        $html = $html -replace 'class=""', ''
-        $html = $html -replace '\s{2,}', ' '
-        $html = $html -replace '<p>\s*</p>', ''
-
-        # Preserve only background:silver styles
-        $html = $html -replace 'style="([^"]*)"' , {
-            $style = $_.Groups[1].Value
-            if ($style -match 'background:\s*silver') {
-                'style="background:silver"'
-            } else {
-                ''
-            }
-        }
-
-        # Handle list formatting
-        $htmlLines = $html -split "`r?`n"
-        $listStack = @()
-        $processed = @()
-
-        foreach ($line in $htmlLines) {
-            $isListItem = $false
-            $listType = ""
-            $itemContent = ""
-            $indentLevel = 0
-            $customListAttr = ""
-
-            if ($line -match 'margin-left:(\d+)pt') {
-                $indentLevel = [math]::Floor(($matches[1] -as [int]) / 18)
-            }
-
-            if ($line -match '<p[^>]*?>\s*[•·]\s*(.*?)</p>') {
-                $itemContent = $matches[1]
-                $listType = "ul"
-                $isListItem = $true
-            }
-            elseif ($line -match '<p[^>]*?>\s*\d+[\.\)]\s*(.*?)</p>') {
-                $itemContent = $matches[1]
-                $listType = "ol"
-                $isListItem = $true
-            }
-            elseif ($line -match '<p[^>]*?>\s*[a-zA-Z][\.\)]\s*(.*?)</p>') {
-                $itemContent = $matches[1]
-                $listType = "ol"
-                $customListAttr = ' type="a"'
-                $isListItem = $true
-            }
-
-            if ($isListItem) {
-                while ($listStack.Count -gt $indentLevel) {
-                    $processed += "</$($listStack[-1].Type)>"
-                    $listStack = $listStack[0..($listStack.Count - 2)]
-                }
-                while ($listStack.Count -lt $indentLevel) {
-                    $processed += "<$listType$customListAttr>"
-                    $listStack += @{ Type = $listType; Attr = $customListAttr }
-                }
-
-                if ($listStack.Count -eq 0 -or $listStack[-1].Type -ne $listType -or $listStack[-1].Attr -ne $customListAttr) {
-                    if ($listStack.Count -gt 0) {
-                        $processed += "</$($listStack[-1].Type)>"
-                        $listStack = $listStack[0..($listStack.Count - 2)]
-                    }
-                    $processed += "<$listType$customListAttr>"
-                    $listStack += @{ Type = $listType; Attr = $customListAttr }
-                }
-
-                $processed += "  <li>$itemContent</li>"
-            }
-            else {
-                while ($listStack.Count -gt 0) {
-                    $processed += "</$($listStack[-1].Type)>"
-                    $listStack = $listStack[0..($listStack.Count - 2)]
-                }
-                $processed += $line
-            }
-        }
-
-        while ($listStack.Count -gt 0) {
-            $processed += "</$($listStack[-1].Type)>"
-            $listStack = $listStack[0..($listStack.Count - 2)]
-        }
-
-        $html = $processed -join "`r`n"
-        Set-Content -Path $outputPath -Value $html
-        Write-Host "Cleaned HTML saved: $outputPath"
-
-    } catch {
-        Write-Warning "Error processing file '$($_.FullName)': $_"
-    }
+try {
+    Write-Host "Opening..."
+    $doc = $word.Documents.Open($filePath, $false, $true)
+    Write-Host "Saving..."
+    $doc.SaveAs($outputPath, 10)
+    $doc.Close()
+    Write-Host "Success!"
+} catch {
+    Write-Warning "Problem: $_"
 }
 
-# Cleanup Word COM
 $word.Quit()
 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
 [GC]::Collect(); [GC]::WaitForPendingFinalizers()
