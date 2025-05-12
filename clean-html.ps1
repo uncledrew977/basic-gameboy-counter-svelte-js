@@ -6,17 +6,17 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Define regex patterns as here-strings to avoid quote errors
-    $stylePattern = @'(?i)\s*style\s*=\s*(".*?"|'.*?')'@
-    $classPattern = @'(?i)\s*class\s*=\s*(".*?"|'.*?')'@
-    $commentPattern = @'(?is)<!--.*?-->'@
-    $emptyTagPattern = @'(?i)<(span|div|font)[^>]*>\s*</\1>'@
+    # Remove all inline style attributes (both double- and single-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*style\s*=\s*(".*?"|\'.*?\')', '')
 
-    # Perform regex replacements
-    $htmlContent = [regex]::Replace($htmlContent, $stylePattern, '')
-    $htmlContent = [regex]::Replace($htmlContent, $classPattern, '')
-    $htmlContent = [regex]::Replace($htmlContent, $commentPattern, '')
-    $htmlContent = [regex]::Replace($htmlContent, $emptyTagPattern, '')
+    # Remove all class attributes (both double- and single-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*class\s*=\s*(".*?"|\'.*?\')', '')
+
+    # Remove HTML comments
+    $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
+
+    # Remove empty tags like <span></span>, <div></div>, <font></font>
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
 
     # Remove empty or whitespace-only lines
     $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
