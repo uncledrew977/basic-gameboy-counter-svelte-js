@@ -8,8 +8,12 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Normalize all tag and attribute case (lowercase)
-    $htmlContent = $htmlContent -replace '(?i)(<[^>]+>)', { $args[0].ToLower() }
+    # Normalize tag case by using a regex MatchEvaluator
+    $htmlContent = [System.Text.RegularExpressions.Regex]::Replace(
+        $htmlContent,
+        '<[^>]+>',
+        { param($match) $match.Value.ToLower() }
+    )
 
     # Convert <strong>/<em> to <b>/<i>
     $htmlContent = $htmlContent -replace "<strong>", "<b>"
@@ -17,27 +21,27 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $htmlContent = $htmlContent -replace "<em>", "<i>"
     $htmlContent = $htmlContent -replace "</em>", "</i>"
 
-    # Keep only style="background:silver" and delete all other styles and class/lang
+    # Remove all style attributes except background:silver
     $htmlContent = $htmlContent -replace 'style="((?:(?!background\s*:\s*silver)[^""])+)"', ''
     $htmlContent = $htmlContent -replace 'style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
+
+    # Remove class and lang attributes (case-normalized already)
     $htmlContent = $htmlContent -replace '\sclass="[^"]*"', ''
     $htmlContent = $htmlContent -replace '\slang="[^"]*"', ''
 
-    # Remove Word-specific comments and styles
+    # Remove Word-specific junk
     $htmlContent = $htmlContent -replace "<!--\[if.*?\]-->", ""
     $htmlContent = $htmlContent -replace "(?s)<style[^>]*>.*?</style>", ""
     $htmlContent = $htmlContent -replace "<meta[^>]*>", ""
     $htmlContent = $htmlContent -replace "mso-[^:]+:[^;""']+;?", ""
 
-    # Remove empty spans, fonts, divs
+    # Remove empty inline elements
     $htmlContent = $htmlContent -replace "<(span|font|div)[^>]*>\s*</\1>", ""
-
-    # Remove any remaining empty inline elements
     $htmlContent = $htmlContent -replace "<(span|font|div)[^>]*></\1>", ""
 
-    # Collapse multiple spaces
+    # Collapse extra spaces
     $htmlContent = $htmlContent -replace "\s{2,}", " "
 
-    # Write back cleaned content
+    # Save cleaned HTML
     Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
 }
