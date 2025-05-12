@@ -6,10 +6,10 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove all inline style attributes (double or single quoted, any spacing)
+    # Remove all inline style attributes (double or single quoted)
     $htmlContent = $htmlContent -replace '(?i)\s*style\s*=\s*(".*?"|\'.*?\')', ''
 
-    # Remove all class attributes (double or single quoted, any spacing)
+    # Remove all class attributes (double or single quoted)
     $htmlContent = $htmlContent -replace '(?i)\s*class\s*=\s*(".*?"|\'.*?\')', ''
 
     # Remove empty tags like <span></span>, <div></div>, <font></font>
@@ -19,7 +19,8 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $htmlContent = $htmlContent -replace '(?s)<!--.*?-->', ''
 
     # Remove blank lines
-    $htmlContent = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" } | Out-String
+    $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
+    $htmlContent = $htmlLines -join "`r`n"
 
     # Save cleaned HTML
     Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
