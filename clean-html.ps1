@@ -6,19 +6,19 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove all inline style attributes (both double- and single-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*style\s*=\s*(".*?"|\'.*?\')', '')
+    # Remove inline styles (only double-quoted to avoid parser errors)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*style\s*=\s*\".*?\"', '')
 
-    # Remove all class attributes (both double- and single-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*class\s*=\s*(".*?"|\'.*?\')', '')
+    # Remove class attributes (only double-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*class\s*=\s*\".*?\"', '')
 
     # Remove HTML comments
     $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
 
-    # Remove empty tags like <span></span>, <div></div>, <font></font>
+    # Remove empty span/div/font tags
     $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
 
-    # Remove empty or whitespace-only lines
+    # Remove empty lines
     $htmlLines = $htmlContent -split "`n" | Where-Object { $_.Trim() -ne "" }
     $htmlContent = $htmlLines -join "`r`n"
 
