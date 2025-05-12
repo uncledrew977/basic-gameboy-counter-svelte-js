@@ -101,7 +101,7 @@ function Strip-Attributes-InBody {
             }
         })
 
-        return $htmlContent -replace [regex]::Escape($matches[0]), $bodyOpen + $cleanBodyContent + $bodyClose
+        return $htmlContent -replace [regex]::Escape($matches[0]), ($bodyOpen + $cleanBodyContent + $bodyClose)
     } else {
         return $htmlContent
     }
