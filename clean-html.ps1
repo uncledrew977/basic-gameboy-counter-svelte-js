@@ -16,17 +16,27 @@ $html = [regex]::Replace($html, '\sstyle="([^"]*)"', {
     }
 })
 
-# 3. Function to strip all attributes from elements inside <body>...</body>
+# 3. Function to strip attributes inside <body>, preserving only style with background:silver
 function Strip-Attributes-InBody {
     param($htmlContent)
 
     if ($htmlContent -match '(?s)(<body[^>]*>)(.*?)(</body>)') {
-        $bodyOpen = $matches[1]
+        $bodyOpen    = $matches[1]
         $bodyContent = $matches[2]
-        $bodyClose = $matches[3]
+        $bodyClose   = $matches[3]
 
-        # Remove all attributes from tags inside the body
-        $cleanBodyContent = $bodyContent -replace '<(\w+)(\s[^>]*?)?>', '<$1>'
+        $cleanBodyContent = [regex]::Replace($bodyContent, '<(\w+)([^>]*)>', {
+            param($tagMatch)
+            $tag   = $tagMatch.Groups[1].Value
+            $attrs = $tagMatch.Groups[2].Value
+
+            if ($attrs -match 'style\s*=\s*"([^"]*background\s*:\s*silver[^"]*)"\s*') {
+                $style = $matches[1]
+                return "<$tag style=`"$style`">"
+            } else {
+                return "<$tag>"
+            }
+        })
 
         return $htmlContent -replace [regex]::Escape($matches[0]), "$bodyOpen$cleanBodyContent$bodyClose"
     } else {
@@ -34,10 +44,10 @@ function Strip-Attributes-InBody {
     }
 }
 
-# Apply body attribute stripping
+# 4. Apply body-cleaning
 $html = Strip-Attributes-InBody $html
 
-# Save the cleaned HTML using .NET (for restricted environments)
+# 5. Save using Set-Content
 $outputPath = "$env:TEMP\cleaned_output.html"
-[System.IO.File]::WriteAllText($outputPath, $html)
-Write-Output "✅ Cleaned HTML saved to: $outputPath"
+$html | Set-Content -Path $outputPath -Encoding UTF8
+Write-Output "Cleaned HTML saved to: $outputPath"
