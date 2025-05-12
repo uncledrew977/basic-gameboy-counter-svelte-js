@@ -6,32 +6,35 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $htmlPath = $_.FullName
     [string]$htmlContent = Get-Content $htmlPath -Raw
 
-    # Use regex to clean Word garbage
-
-    # 1. Strip all class attributes
+    # Remove class attributes
     $htmlContent = $htmlContent -replace '\sclass="[^"]*"', ''
 
-    # 2. Strip all lang attributes
+    # Remove lang attributes
     $htmlContent = $htmlContent -replace '\slang="[^"]*"', ''
 
-    # 3. Strip all style attributes except those with background:silver
-    $htmlContent = $htmlContent -replace 'style="(?![^"]*background\s*:\s*silver)[^"]*"', ''
+    # Preserve only style attributes that include background:silver
+    $htmlContent = $htmlContent -replace 'style="((?![^"]*background\s*:\s*silver)[^"]*)"', ''
 
-    # 4. Remove empty spans, fonts, etc.
+    # Optional: normalize background:silver (remove other stuff in style)
+    $htmlContent = $htmlContent -replace 'style="[^"]*(background\s*:\s*silver)[^"]*"', 'style="$1"'
+
+    # Remove empty tags (e.g. <span></span>, <font></font>)
     $htmlContent = $htmlContent -replace '<(span|font)[^>]*>\s*</\1>', ''
 
-    # 5. Ensure bold and italic tags are preserved (replace <strong> with <b>, <em> with <i>)
+    # Replace <strong>/<em> with <b>/<i>
     $htmlContent = $htmlContent -replace '<strong>', '<b>' -replace '</strong>', '</b>'
     $htmlContent = $htmlContent -replace '<em>', '<i>' -replace '</em>', '</i>'
 
-    # 6. Optional: remove meta and mso styles (from Word)
-    $htmlContent = $htmlContent -replace '<!--\[if.*?endif\]-->', '' -replace '<meta[^>]*>', ''
-    $htmlContent = $htmlContent -replace '<style[^>]*>.*?</style>', '' -replace 'mso-[^:]+:[^;"]+;?', ''
+    # Remove conditional Word comments and Word styles
+    $htmlContent = $htmlContent -replace '<!--\[if.*?endif\]-->', ''
+    $htmlContent = $htmlContent -replace '<style[^>]*>.*?</style>', ''
+    $htmlContent = $htmlContent -replace '<meta[^>]*>', ''
+    $htmlContent = $htmlContent -replace 'mso-[^:]+:[^;"]+;?', ''
 
-    # 7. Optional: cleanup leftover spaces/tags
+    # Trim excess whitespace
     $htmlContent = $htmlContent -replace '\s{2,}', ' '
 
-    # Save the cleaned HTML back to file
+    # Save cleaned content
     Set-Content -Path $htmlPath -Value $htmlContent -Encoding UTF8
 
     Write-Host "Cleaned: $htmlPath"
