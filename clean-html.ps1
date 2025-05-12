@@ -6,20 +6,14 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove class attributes (quoted or unquoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sclass\s*=\s*(["\'])?[^"\s>]+(["\'])?', '')
+    # Remove class attributes (double-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '\sclass\s*=\s*"[^"]*"', '')
 
-    # Remove style attributes (quoted or unquoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sstyle\s*=\s*(["\'])?[^"\s>]+(["\'])?', '')
-
-    # Remove id attributes (quoted or unquoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sid\s*=\s*(["\'])?[^"\s>]+(["\'])?', '')
-
-    # Remove lang attributes (quoted or unquoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\slang\s*=\s*(["\'])?[^"\s>]+(["\'])?', '')
+    # Remove style attributes (double-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '\sstyle\s*=\s*"[^"]*"', '')
 
     # Remove HTML comments
-    $htmlContent = [regex]::Replace($htmlContent, '(?is)<!--.*?-->', '')
+    $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
 
     # Remove empty span/div/font tags
     $htmlContent = [regex]::Replace($htmlContent, '(?i)<(span|div|font)[^>]*>\s*</\1>', '')
