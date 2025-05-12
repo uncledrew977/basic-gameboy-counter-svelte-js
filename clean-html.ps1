@@ -1,4 +1,4 @@
-$inputDir = "C:\Path\To\Your\HTML\Files"
+$inputDir = "C:\Test\Output"
 
 Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $htmlPath = $_.FullName
@@ -6,11 +6,11 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
     Write-Host "Cleaning: $htmlPath"
 
-    # Remove inline styles (only double-quoted to avoid parser errors)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*style\s*=\s*\".*?\"', '')
+    # Remove class attributes (double-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '\sclass\s*=\s*"[^"]*"', '')
 
-    # Remove class attributes (only double-quoted)
-    $htmlContent = [regex]::Replace($htmlContent, '(?i)\s*class\s*=\s*\".*?\"', '')
+    # Remove style attributes (double-quoted)
+    $htmlContent = [regex]::Replace($htmlContent, '\sstyle\s*=\s*"[^"]*"', '')
 
     # Remove HTML comments
     $htmlContent = [regex]::Replace($htmlContent, '(?s)<!--.*?-->', '')
