@@ -12,6 +12,12 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     # Remove style attributes (quoted or unquoted)
     $htmlContent = [regex]::Replace($htmlContent, '(?i)\sstyle\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', '')
 
+    # Remove id attributes (quoted or unquoted)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\sid\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', '')
+
+    # Remove lang attributes (quoted or unquoted)
+    $htmlContent = [regex]::Replace($htmlContent, '(?i)\slang\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', '')
+
     # Remove HTML comments
     $htmlContent = [regex]::Replace($htmlContent, '(?is)<!--.*?-->', '')
 
