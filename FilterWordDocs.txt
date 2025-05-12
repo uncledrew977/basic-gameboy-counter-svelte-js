@@ -1,38 +1,20 @@
-$inputDir = "C:\your\docx\folder"
-$outputDir = "C:\your\output\folder"
-$logFile = "C:\your\output\conversion-log.txt"
-$wdFormatFilteredHTML = 10
+param (
+    [string]$InputPath,
+    [string]$OutputPath
+)
 
-# Create output and log directory if needed
-if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir | Out-Null }
-if (Test-Path $logFile) { Remove-Item $logFile }
-
-# Start Word
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
 
-Get-ChildItem -Path $inputDir -Filter *.docx | ForEach-Object {
-    $filePath = $_.FullName
-    $baseName = $_.BaseName
-    $outputPath = Join-Path $outputDir ($baseName + ".html")
-
-    Add-Content $logFile "`n[$(Get-Date -Format 'HH:mm:ss')] Starting: $filePath"
-
-    try {
-        $doc = $word.Documents.Open($filePath, $false, $true)
-        $doc.SaveAs($outputPath, $wdFormatFilteredHTML)
-        $doc.Close()
-
-        Add-Content $logFile "SUCCESS: Saved to $outputPath"
-    } catch {
-        Add-Content $logFile "ERROR: Failed $filePath - $_"
-    }
+try {
+    $doc = $word.Documents.Open($InputPath, $false, $true)
+    $doc.SaveAs($OutputPath, 10)
+    $doc.Close()
+} catch {
+    Write-Warning "Failed: $InputPath - $_"
 }
 
-# Cleanup
 $word.Quit()
 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
 [GC]::Collect(); [GC]::WaitForPendingFinalizers()
-
-Write-Host "Done. Check log: $logFile"
