@@ -18,7 +18,8 @@ function Convert-WordLists {
         $innerHtml = $match.Groups[2].Value.Trim()
 
         if ($fullTag -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
-            $margin = [double]($matches[1].Groups[1].Value)
+            $marginMatch = [regex]::Match($fullTag, 'margin-left:\s*(\d+(\.\d+)?)pt')
+            $margin = [double]$marginMatch.Groups[1].Value
             $level = [math]::Round($margin / 36)
         } else {
             $level = 0
@@ -109,7 +110,7 @@ function Strip-Attributes-InBody {
 # Apply attribute cleaning
 $html = Strip-Attributes-InBody $html
 
-# Step 5: Save output with Set-Content (no emoji)
+# Step 5: Save output
 $outputPath = "$env:TEMP\cleaned_output.html"
 $html | Set-Content -Path $outputPath -Encoding UTF8
 Write-Output "Cleaned HTML saved to: $outputPath"
