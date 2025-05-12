@@ -6,7 +6,6 @@ $html = Get-Content $htmlPath -Raw
 function Convert-WordLists {
     param($htmlContent)
 
-    # Extract <p> tags that look like list items (with class or margin-left style)
     $pattern = '<p[^>]*(MsoListParagraph|margin-left:[^">]+)[^>]*>(.*?)</p>'
     $matches = [regex]::Matches($htmlContent, $pattern, 'IgnoreCase')
 
@@ -19,7 +18,7 @@ function Convert-WordLists {
         $innerHtml = $match.Groups[2].Value.Trim()
 
         if ($fullTag -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
-            $margin = [double]$matches[1].Groups[1].Value
+            $margin = [double]($matches[1].Groups[1].Value)
             $level = [math]::Round($margin / 36)
         } else {
             $level = 0
@@ -36,25 +35,25 @@ function Convert-WordLists {
         $itemText = $innerHtml -replace '^<span[^>]*>.*?</span>', ''
         $itemText = $itemText.Trim()
 
-        while ($prevLevel < $level) {
-            $output += "<$listType>"
+        while ($prevLevel -lt $level) {
+            $output += ("<" + $listType + ">")
             $listStack += $listType
             $prevLevel++
         }
 
-        while ($prevLevel > $level) {
+        while ($prevLevel -gt $level) {
             $lastList = $listStack[-1]
-            $output += "</$lastList>"
+            $output += ("</" + $lastList + ">")
             $listStack = $listStack[0..($listStack.Count - 2)]
             $prevLevel--
         }
 
-        $output += "<li>$itemText</li>"
+        $output += ("<li>" + $itemText + "</li>")
     }
 
     while ($listStack.Count -gt 0) {
         $lastList = $listStack[-1]
-        $output += "</$lastList>"
+        $output += ("</" + $lastList + ">")
         $listStack = $listStack[0..($listStack.Count - 2)]
     }
 
@@ -62,13 +61,13 @@ function Convert-WordLists {
     return $htmlContent + $output
 }
 
-# Run list converter
+# Run list converter first
 $html = Convert-WordLists $html
 
-# Remove class=""
+# Step 2: Remove class=""
 $html = $html -replace '\sclass=""', ''
 
-# Remove style unless it contains background:silver
+# Step 3: Remove style unless it contains background:silver
 $html = [regex]::Replace($html, '\sstyle="([^"]*)"', {
     param($match)
     $style = $match.Groups[1].Value
@@ -79,7 +78,7 @@ $html = [regex]::Replace($html, '\sstyle="([^"]*)"', {
     }
 })
 
-# Strip attributes inside <body> but preserve background:silver style
+# Step 4: Strip attributes inside <body>, preserving background:silver
 function Strip-Attributes-InBody {
     param($htmlContent)
 
@@ -95,22 +94,22 @@ function Strip-Attributes-InBody {
 
             if ($attrs -match 'style\s*=\s*"([^"]*background\s*:\s*silver[^"]*)"\s*') {
                 $style = $matches[1]
-                return "<$tag style=`"$style`">"
+                return ("<" + $tag + " style=`"" + $style + "`">")
             } else {
-                return "<$tag>"
+                return ("<" + $tag + ">")
             }
         })
 
-        return $htmlContent -replace [regex]::Escape($matches[0]), "$bodyOpen$cleanBodyContent$bodyClose"
+        return $htmlContent -replace [regex]::Escape($matches[0]), $bodyOpen + $cleanBodyContent + $bodyClose
     } else {
         return $htmlContent
     }
 }
 
-# Clean body
+# Apply attribute cleaning
 $html = Strip-Attributes-InBody $html
 
-# Save with Set-Content
+# Step 5: Save output with Set-Content (no emoji)
 $outputPath = "$env:TEMP\cleaned_output.html"
 $html | Set-Content -Path $outputPath -Encoding UTF8
 Write-Output "Cleaned HTML saved to: $outputPath"
