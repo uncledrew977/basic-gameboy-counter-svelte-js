@@ -1,6 +1,10 @@
-# Load the HTML file
+# Load the HTML file with UTF-8 BOM support
 $htmlPath = "C:\Path\To\yourfile.html"
-$html = Get-Content $htmlPath -Raw
+$html = Get-Content $htmlPath -Encoding utf8BOM -Raw
+
+# Optional: normalize Word's weird non-breaking spaces
+$html = $html -replace '\u00A0', ' '
+$html = $html -replace '&nbsp;', ' '
 
 # Step 1: Convert Word-generated lists into real HTML lists
 function Convert-WordLists {
@@ -110,7 +114,7 @@ function Strip-Attributes-InBody {
 # Apply attribute cleaning
 $html = Strip-Attributes-InBody $html
 
-# Step 5: Save output
+# Step 5: Save output as UTF-8
 $outputPath = "$env:TEMP\cleaned_output.html"
 $html | Set-Content -Path $outputPath -Encoding UTF8
 Write-Output "Cleaned HTML saved to: $outputPath"
