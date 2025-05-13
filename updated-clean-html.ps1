@@ -2,90 +2,76 @@
 # Load HtmlAgilityPack
 Add-Type -Path "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.dll"
 
-$inputPath = "C:\Path\To\Your\test (3).html"
-$outputPath = "C:\Path\To\Your\cleaned_output.html"
+$inputPath = "C:\Path\To\Input\test (3).html"
+$outputPath = "C:\Path\To\Output\cleaned_test3.html"
 
-$html = Get-Content -Path $inputPath -Raw -Encoding Default
+$html = Get-Content -Path $inputPath -Encoding Default -Raw
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-$bulletPatterns = @(
-    '^\s*(\d+)\.\s*',       # 1., 2., etc.
-    '^\s*([a-zA-Z])\.\s*',  # a., b., A., B., etc.
-    '^\s*(i{1,3}|iv|v|vi{1,3}|ix|x)\.\s*', # i., ii., iii., iv., etc.
-    '^\s*[\u2022\u00B7·]\s*'  # Unicode bullets: • ·
-)
+function Get-ListType {
+    param($text)
 
-function IsBullet($text) {
-    foreach ($pattern in $bulletPatterns) {
-        if ($text -match $pattern) { return $true }
-    }
-    return $false
+    if ($text -match '^\(?[ivxlc]+\)\.?$') { return "ol" }    # roman numerals
+    elseif ($text -match '^[a-zA-Z]\.$') { return "ol" }      # alphabetic
+    elseif ($text -match '^\d+\.$') { return "ol" }           # numeric
+    elseif ($text -match '^[•·▪]$') { return "ul" }           # bullet chars
+    else { return $null }
 }
 
-function StripBullet($text) {
-    foreach ($pattern in $bulletPatterns) {
-        if ($text -match $pattern) {
-            return $text -replace $pattern, ''
-        }
-    }
-    return $text
-}
+function CleanNode {
+    param([HtmlAgilityPack.HtmlNode]$node, [HtmlAgilityPack.HtmlNode]$parent)
 
-function CreateCleanNode($node) {
     switch ($node.Name.ToLower()) {
-        "h1" { return $node.Clone() }
-        "h2" { return $node.Clone() }
-        "h3" { return $node.Clone() }
-        "h4" { return $node.Clone() }
-        "h5" { return $node.Clone() }
-        "h6" { return $node.Clone() }
-        "table" { return $node.Clone() }
-        "thead" { return $node.Clone() }
-        "tbody" { return $node.Clone() }
-        "tr" { return $node.Clone() }
-        "th" { return $node.Clone() }
-        "td" { return $node.Clone() }
+        "h1" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
+        "h2" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
+        "h3" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
+        "h4" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
+        "h5" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
+        "h6" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
         "p" {
             $text = $node.InnerText.Trim()
-            if (IsBullet($text)) {
-                return @{ type = "li"; content = StripBullet($text); raw = $node }
-            } elseif ($text) {
-                $p = $doc.CreateElement("p")
-                $p.InnerHtml = $node.InnerHtml
-                return $p
+            if ($text -match '^(?<bullet>(\(?[ivxlc]+\)|[a-zA-Z]|\d+|[•·▪]))[\.\)]\s+(?<content>.+)') {
+                $bullet = $matches['bullet']
+                $content = $matches['content']
+                $listType = Get-ListType $bullet
+                if ($listType) {
+                    if (-not $script:currentList -or $script:currentList.Name -ne $listType) {
+                        $script:currentList = $doc.CreateElement($listType)
+                        $parent.AppendChild($script:currentList)
+                    }
+                    $li = $doc.CreateElement("li")
+                    $li.InnerHtml = $content
+                    $script:currentList.AppendChild($li)
+                    return
+                }
+            }
+            $script:currentList = $null
+            $newP = $doc.CreateElement("p")
+            $newP.InnerHtml = $node.InnerHtml
+            $parent.AppendChild($newP)
+        }
+        "table" {
+            $newTable = $node.Clone()
+            $parent.AppendChild($newTable)
+        }
+        default {
+            foreach ($child in $node.ChildNodes) {
+                CleanNode -node $child -parent $parent
             }
         }
-        default { return $null }
     }
 }
 
-$body = $doc.DocumentNode.SelectSingleNode("//body")
-$newBody = $doc.CreateElement("body")
-$currentList = $null
+$newDoc = New-Object HtmlAgilityPack.HtmlDocument
+$htmlElem = $newDoc.CreateElement("html")
+$bodyElem = $newDoc.CreateElement("body")
+$newDoc.DocumentNode.AppendChild($htmlElem)
+$htmlElem.AppendChild($bodyElem)
 
-foreach ($child in $body.ChildNodes) {
-    $clean = CreateCleanNode $child
-    if ($clean -is [HtmlAgilityPack.HtmlNode]) {
-        if ($currentList) {
-            $newBody.AppendChild($currentList)
-            $currentList = $null
-        }
-        $newBody.AppendChild($clean)
-    } elseif ($clean -is [Hashtable] -and $clean.type -eq "li") {
-        if (-not $currentList) {
-            $currentList = $doc.CreateElement("ul")
-        }
-        $li = $doc.CreateElement("li")
-        $li.InnerHtml = $clean.content
-        $currentList.AppendChild($li)
-    }
-}
+$script:currentList = $null
+CleanNode -node $doc.DocumentNode.DocumentNode -parent $bodyElem
 
-if ($currentList) {
-    $newBody.AppendChild($currentList)
-}
-
-$doc.DocumentNode.SelectSingleNode("//body").RemoveAllChildren()
-$doc.DocumentNode.SelectSingleNode("//body").AppendChild($newBody)
-$doc.Save($outputPath)
+# Save output
+$newDoc.Save($outputPath)
+Write-Host "Cleaned HTML saved to: $outputPath"
