@@ -2,20 +2,21 @@
 $htmlPath = "C:\Path\To\Test.html"
 $outputPath = "$env:TEMP\fixed_lists_cleaned.html"
 
-# Load HtmlAgilityPack DLL (adjust path to match your actual DLL location)
+# Load HtmlAgilityPack DLL (adjust path to match your version)
 $hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
 Add-Type -Path $hpackDll
 
-# Load HTML content
+# Load the HTML content
 $html = Get-Content $htmlPath -Raw -Encoding UTF8
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Constants and state
+# Constants and tracking
 $indentUnit = 36
 $listStack = @()
 $outputBuilder = [ref] ''
 
+# Close open lists down to target level
 function Close-Lists {
     param([int]$targetLevel, [ref]$builder)
     while ($listStack.Count -gt $targetLevel) {
@@ -24,55 +25,60 @@ function Close-Lists {
     }
 }
 
+# Open a new list
 function Open-List {
     param($type, [ref]$builder)
     $builder.Value += "<$type>`n"
     $listStack += $type
 }
 
+# Match Word-style bullets (escaped properly for PowerShell/regex)
 function Is-Bullet {
     param($text)
-    return $text -match '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+'
+    return $text -match '^\s*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|[\•\▪\·]))\s+'
 }
 
+# Strip bullet prefix from text
 function Strip-Bullet {
     param($text)
-    return ($text -replace '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+', '').Trim()
+    return ($text -replace '^\s*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|[\•\▪\·]))\s+', '').Trim()
 }
 
-# Process all <p> tags
+# Process <p> nodes (Word list items typically live here)
 foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
     $class = $node.GetAttributeValue("class", "")
     $style = $node.GetAttributeValue("style", "")
     $text = $node.InnerText.Trim()
 
-    # Estimate nesting level
+    # Determine nesting level from margin-left
     $level = 0
     if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
         $margin = [double]$matches[1]
         $level = [math]::Round($margin / $indentUnit)
     }
 
+    # If it's a list paragraph and starts with a bullet...
     if ($class -like "*MsoListParagraph*" -and (Is-Bullet $text)) {
         $cleanText = Strip-Bullet $text
         $listType = if ($text -match '^\s*\(?[0-9ivxlcdm]+\)?[\.\):]') { "ol" } else { "ul" }
 
+        # Open/close lists as needed
         Close-Lists -targetLevel $level -builder $outputBuilder
         if ($listStack.Count -lt ($level + 1)) {
             Open-List -type $listType -builder $outputBuilder
         }
 
         $outputBuilder.Value += "<li>$cleanText</li>`n"
-        $node.Remove()  # remove list <p> from document
+        $node.Remove()  # Don't output this node again later
     }
 }
 
-# Close remaining lists
+# Close remaining open lists
 Close-Lists -targetLevel 0 -builder $outputBuilder
 
-# Add back any non-list HTML
+# Append remaining non-list HTML
 $outputBuilder.Value += $doc.DocumentNode.InnerHtml
 
-# Save result
+# Save final output
 Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
-Write-Output "✅ Cleaned HTML with proper list structure saved to: $outputPath"
+Write-Output "✅ Cleaned HTML with lists saved to: $outputPath"
