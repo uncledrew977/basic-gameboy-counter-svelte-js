@@ -15,7 +15,11 @@ $doc.LoadHtml($htmlContent)
 # Clean attributes from a node
 function Clean-Attributes($node) {
     $attrsToKeep = @("colspan", "rowspan") # Keep essential table attrs
-    foreach ($attr in $node.Attributes.ToArray()) {
+    $attributes = @()
+    foreach ($attr in $node.Attributes) {
+        $attributes += $attr
+    }
+    foreach ($attr in $attributes) {
         if ($attrsToKeep -notcontains $attr.Name.ToLower()) {
             $node.Attributes.Remove($attr)
         }
@@ -25,6 +29,7 @@ function Clean-Attributes($node) {
 # Recursively clean attributes and remove non-structural tags
 function Clean-Node($node) {
     $preserveTags = @("h1","h2","h3","h4","h5","h6","p","ul","ol","li","table","thead","tbody","tr","td","th")
+
     if ($node.NodeType -eq "Element") {
         if ($preserveTags -notcontains $node.Name.ToLower()) {
             $node.Name = "p"  # Replace unknown elements with <p>
@@ -32,7 +37,11 @@ function Clean-Node($node) {
         Clean-Attributes $node
     }
 
-    foreach ($child in $node.ChildNodes.ToArray()) {
+    $children = @()
+    foreach ($child in $node.ChildNodes) {
+        $children += $child
+    }
+    foreach ($child in $children) {
         Clean-Node $child
     }
 }
