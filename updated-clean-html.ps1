@@ -1,72 +1,75 @@
-# Path to the HTML file
+# Paths
 $htmlPath = "C:\Path\To\Test.html"
-$outputPath = "$env:TEMP\cleaned_with_lists.html"
+$outputPath = "$env:TEMP\fixed_lists_cleaned.html"
 
-# Load HtmlAgilityPack
-$hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\netstandard2.0\HtmlAgilityPack.dll"
+# Load HtmlAgilityPack DLL
+$hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
 Add-Type -Path $hpackDll
 
-# Load HTML content
+# Load the HTML
 $html = Get-Content $htmlPath -Raw -Encoding UTF8
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Constants
+# Setup
 $indentUnit = 36
 $listStack = @()
+$outputBuilder = [ref] ''
 
-function Close-Lists($level, [ref]$outputBuilder) {
-    while ($listStack.Count -gt $level) {
-        $closing = "</$($listStack[-1])>`n"
-        $outputBuilder.Value += $closing
+function Close-Lists {
+    param([int]$targetLevel, [ref]$builder)
+    while ($listStack.Count -gt $targetLevel) {
+        $builder.Value += "</$($listStack[-1])>`n"
         $listStack = $listStack[0..($listStack.Count - 2)]
     }
 }
 
-function Open-List($type, [ref]$outputBuilder) {
-    $outputBuilder.Value += "<$type>`n"
+function Open-List {
+    param($type, [ref]$builder)
+    $builder.Value += "<$type>`n"
     $listStack += $type
 }
 
-# Builder for output HTML
-$outputBuilder = [ref] ''
+function Is-Bullet($text) {
+    return $text -match '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+'
+}
 
-# Go through all top-level nodes
-foreach ($node in $doc.DocumentNode.SelectNodes("//*")) {
-    if ($node.Name -eq "p" -and $node.GetAttributeValue("class", "") -like "*MsoListParagraph*") {
-        $style = $node.GetAttributeValue("style", "")
-        $level = 0
-        if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
-            $margin = [double]$matches[1]
-            $level = [math]::Round($margin / $indentUnit)
-        }
+function Strip-Bullet($text) {
+    return ($text -replace '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+', '').Trim()
+}
 
-        # Extract text, remove bullets
-        $text = $node.InnerText.Trim()
-        if ($text -match '^[a-zA-Z0-9]{1,5}[\.\)\:]\s*') {
-            $text = $text -replace '^[a-zA-Z0-9]{1,5}[\.\)\:]\s*', ''
-        }
+# Process nodes
+foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
+    $class = $node.GetAttributeValue("class", "")
+    $style = $node.GetAttributeValue("style", "")
+    $text = $node.InnerText.Trim()
 
-        # Determine list type
-        $listType = if ($node.InnerHtml -match '[a-zA-Z0-9]{1,5}[\.\)\:]') { "ol" } else { "ul" }
+    $level = 0
+    if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
+        $margin = [double]$matches[1]
+        $level = [math]::Round($margin / $indentUnit)
+    }
 
-        Close-Lists $level $outputBuilder
+    if ($class -like "*MsoListParagraph*" -and (Is-Bullet $text)) {
+        $cleanText = Strip-Bullet $text
+        $listType = if ($text -match '^\s*\(?[0-9ivxlcdm]+\)?[\.\):]') { "ol" } else { "ul" }
+
+        Close-Lists -targetLevel $level -builder $outputBuilder
         if ($listStack.Count -lt ($level + 1)) {
-            Open-List $listType $outputBuilder
+            Open-List -type $listType -builder $outputBuilder
         }
 
-        $outputBuilder.Value += "<li>$text</li>`n"
-        $node.Remove()  # Remove from final output
+        $outputBuilder.Value += "<li>$cleanText</li>`n"
+        $node.Remove()  # Remove this <p> from the original doc
     }
 }
 
-# Close remaining open lists
-Close-Lists 0 $outputBuilder
+# Close any remaining lists
+Close-Lists -targetLevel 0 -builder $outputBuilder
 
-# Append remaining HTML after cleaned lists
-$remaining = $doc.DocumentNode.InnerHtml
-$outputBuilder.Value += "`n$remaining"
+# Add remaining non-list content
+$outputBuilder.Value += $doc.DocumentNode.InnerHtml
 
-# Save output
+# Save result
 Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
 Write-Output "Cleaned HTML with lists saved to: $outputPath"
