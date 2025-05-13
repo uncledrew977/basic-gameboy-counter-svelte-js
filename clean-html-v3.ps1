@@ -4,26 +4,23 @@ Add-Type -Path "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\H
 $inputPath = "C:\Test\test.html"
 $outputPath = "C:\Test\output_cleaned.html"
 
-# Load HTML with Windows-1252 encoding
+# Load HTML
 $htmlRaw = Get-Content $inputPath -Encoding Default -Raw
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($htmlRaw)
 
-# Remove all style and class attributes
-$doc.DocumentNode.Descendants() | ForEach-Object {
-    $_.Attributes.Remove("style")
-    $_.Attributes.Remove("class")
-}
-
-# Bullet recognition
+# Bullet recognition helpers
 function IsBullet($text) {
-    return $text -match '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+$'
+    return $text -match '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+'
 }
-function CleanBullet($text) {
-    return $text -replace '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+', ''
+function CleanBullet($html) {
+    return $html -replace '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+', ''
+}
+function GetIndent($nodeHtml) {
+    return ($nodeHtml -split '&nbsp;').Length - 1
 }
 
-# Detect and convert bullet paragraphs into real lists
+# Convert bullet-style paragraphs to real lists
 $pNodes = $doc.DocumentNode.SelectNodes("//p")
 if ($pNodes) {
     $listStack = @()
@@ -33,8 +30,8 @@ if ($pNodes) {
         $node = $pNodes[$i]
         $text = $node.InnerText.Trim()
 
-        if ($text -match '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+') {
-            $indent = ($node.InnerHtml -split '&nbsp;').Length - 1
+        if (IsBullet $text) {
+            $indent = GetIndent($node.InnerHtml)
             while ($listStack.Count -gt 0 -and $indent -le $listStack[-1].Indent) {
                 $listStack[-1].ListNode = $listStack[-1].ListNode.ParentNode
                 $listStack.Pop() | Out-Null
@@ -57,6 +54,12 @@ if ($pNodes) {
     }
 }
 
-# Save output HTML
+# Remove style and class attributes *after* list processing
+$doc.DocumentNode.Descendants() | ForEach-Object {
+    $_.Attributes.Remove("style")
+    $_.Attributes.Remove("class")
+}
+
+# Save cleaned HTML
 $doc.Save($outputPath)
 Write-Host "Cleaned HTML saved to: $outputPath"
