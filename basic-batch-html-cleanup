@@ -11,66 +11,82 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
     $doc.LoadHtml($decodedContent)
 
     # Remove attributes except style="font-weight: bold;" and clean up class/empty tags
-    foreach ($node in $doc.DocumentNode.SelectNodes("//*")) {
-        if ($node.Name -eq "table") {
-            continue  # will process tables later
-        }
-
-        # Retain only style="font-weight: bold;" if it exists
-        if ($node.Attributes["style"]) {
-            $style = $node.GetAttributeValue("style", "").Trim().ToLower()
-            if ($style -ne "font-weight: bold;") {
-                $node.Attributes.Remove("style")
+    $allNodes = $doc.DocumentNode.SelectNodes("//*")
+    if ($allNodes) {
+        foreach ($node in $allNodes) {
+            if ($node.Name -eq "table") {
+                continue  # will process tables later
             }
-        }
 
-        # Remove all other attributes except allowed style
-        if ($node.Attributes.Count -gt 0) {
-            $toRemove = @()
-            foreach ($attr in $node.Attributes) {
-                if ($attr.Name -ne "style" -or $node.GetAttributeValue("style", "").ToLower() -ne "font-weight: bold;") {
-                    $toRemove += $attr.Name
+            # Retain only style="font-weight: bold;" if it exists
+            if ($node.Attributes["style"]) {
+                $style = $node.GetAttributeValue("style", "").Trim().ToLower()
+                if ($style -ne "font-weight: bold;") {
+                    $node.Attributes.Remove("style")
                 }
             }
-            foreach ($name in $toRemove) {
-                $node.Attributes.Remove($name)
+
+            # Remove all other attributes except allowed style
+            if ($node.Attributes.Count -gt 0) {
+                $toRemove = @()
+                foreach ($attr in $node.Attributes) {
+                    if ($attr.Name -ne "style" -or $node.GetAttributeValue("style", "").ToLower() -ne "font-weight: bold;") {
+                        $toRemove += $attr.Name
+                    }
+                }
+                foreach ($name in $toRemove) {
+                    $node.Attributes.Remove($name)
+                }
             }
         }
     }
 
     # Remove all class attributes
-    $doc.DocumentNode.SelectNodes("//*[@class]") | ForEach-Object { $_.Attributes.Remove("class") }
+    $classNodes = $doc.DocumentNode.SelectNodes("//*[@class]")
+    if ($classNodes) {
+        foreach ($node in $classNodes) {
+            $node.Attributes.Remove("class")
+        }
+    }
 
     # Remove empty elements
-    $doc.DocumentNode.SelectNodes("//*") | Where-Object {
-        !$_.HasChildNodes -and ($_.InnerHtml -match '^\s*$')
-    } | ForEach-Object { $_.Remove() }
+    $cleanableNodes = $doc.DocumentNode.SelectNodes("//*")
+    if ($cleanableNodes) {
+        foreach ($node in $cleanableNodes) {
+            if (!$node.HasChildNodes -and ($node.InnerHtml -match '^\s*$')) {
+                $node.Remove()
+            }
+        }
+    }
 
     # Process tables
-    foreach ($table in $doc.DocumentNode.SelectNodes("//table")) {
-        $table.Attributes.RemoveAll()
-        $table.SetAttributeValue("border", "1")
-        $table.SetAttributeValue("cellpadding", "1")
-        $table.SetAttributeValue("cellspacing", "1")
-        $table.SetAttributeValue("style", "border-collapse:collapse; width:100%")
+    $tables = $doc.DocumentNode.SelectNodes("//table")
+    if ($tables) {
+        foreach ($table in $tables) {
+            $table.Attributes.RemoveAll()
+            $table.SetAttributeValue("border", "1")
+            $table.SetAttributeValue("cellpadding", "1")
+            $table.SetAttributeValue("cellspacing", "1")
+            $table.SetAttributeValue("style", "border-collapse:collapse; width:100%")
 
-        # Remove existing colgroup if any
-        $existingColgroup = $table.SelectSingleNode("colgroup")
-        if ($existingColgroup) { $existingColgroup.Remove() }
+            # Remove existing colgroup if any
+            $existingColgroup = $table.SelectSingleNode("colgroup")
+            if ($existingColgroup) { $existingColgroup.Remove() }
 
-        # Add new colgroup with two cols
-        $colgroup = $doc.CreateElement("colgroup")
+            # Add new colgroup with two cols
+            $colgroup = $doc.CreateElement("colgroup")
 
-        $col1 = $doc.CreateElement("col")
-        $col1.SetAttributeValue("style", "width:22%")
+            $col1 = $doc.CreateElement("col")
+            $col1.SetAttributeValue("style", "width:22%")
 
-        $col2 = $doc.CreateElement("col")
-        $col2.SetAttributeValue("style", "width:78%")
+            $col2 = $doc.CreateElement("col")
+            $col2.SetAttributeValue("style", "width:78%")
 
-        $colgroup.AppendChild($col1)
-        $colgroup.AppendChild($col2)
+            $colgroup.AppendChild($col1)
+            $colgroup.AppendChild($col2)
 
-        $table.PrependChild($colgroup)
+            $table.PrependChild($colgroup)
+        }
     }
 
     # Save modified HTML
