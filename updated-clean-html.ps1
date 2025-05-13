@@ -1,34 +1,47 @@
 # Load HtmlAgilityPack
-Add-Type -Path "C:\Path\To\HtmlAgilityPack.dll"
+Add-Type -Path "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.dll"
 
-# Load the HTML content with correct encoding
-$path = "C:\Path\To\Your\File.html"
-$html = Get-Content $path -Encoding Default -Raw
+# Input and output paths
+$inputPath = "C:\Test\test (3).html"
+$outputPath = "C:\Test\clean_output.html"
 
-# Load the document
+# Load the document using the correct encoding
+$encoding = [System.Text.Encoding]::GetEncoding("windows-1252")
+$htmlContent = [System.IO.File]::ReadAllText($inputPath, $encoding)
 $doc = New-Object HtmlAgilityPack.HtmlDocument
-$doc.LoadHtml($html)
+$doc.OptionFixNestedTags = $true
+$doc.LoadHtml($htmlContent)
 
-# Bullet regex: handles 1., a., i., ii., · etc.
-$bulletPattern = '^\s*(?:[0-9]+\.|[a-zA-Z]{1,3}\.|[ivxlcdm]+\.)\s*$|^\s*[·•]\s*$'
-
-# Redact logic
-function Redact-Text($text) {
-    if ($text -match $bulletPattern) {
-        return $text
-    }
-    return ($text -replace '\S', 'X')
-}
-
-# Process all text nodes
-foreach ($node in $doc.DocumentNode.SelectNodes("//*[not(self::script or self::style)]/text()")) {
-    $trimmed = $node.InnerText.Trim()
-    if ($trimmed) {
-        $node.InnerHtml = Redact-Text $trimmed
+# Clean attributes from a node
+function Clean-Attributes($node) {
+    $attrsToKeep = @("colspan", "rowspan") # Keep essential table attrs
+    foreach ($attr in $node.Attributes.ToArray()) {
+        if ($attrsToKeep -notcontains $attr.Name.ToLower()) {
+            $node.Attributes.Remove($attr)
+        }
     }
 }
 
-# Save output
-$outputPath = "C:\Path\To\Redacted-Output.html"
-$doc.Save($outputPath)
-Write-Host "Redacted file saved to $outputPath"
+# Recursively clean attributes and remove non-structural tags
+function Clean-Node($node) {
+    $preserveTags = @("h1","h2","h3","h4","h5","h6","p","ul","ol","li","table","thead","tbody","tr","td","th")
+    if ($node.NodeType -eq "Element") {
+        if ($preserveTags -notcontains $node.Name.ToLower()) {
+            $node.Name = "p"  # Replace unknown elements with <p>
+        }
+        Clean-Attributes $node
+    }
+
+    foreach ($child in $node.ChildNodes.ToArray()) {
+        Clean-Node $child
+    }
+}
+
+Clean-Node $doc.DocumentNode
+
+# Save the cleaned HTML
+$sw = New-Object System.IO.StreamWriter($outputPath, $false, $encoding)
+$doc.Save($sw)
+$sw.Close()
+
+Write-Host "Cleaned HTML saved to $outputPath"
