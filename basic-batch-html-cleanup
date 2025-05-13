@@ -26,11 +26,15 @@ Get-ChildItem -Path $inputDir -Filter *.html | ForEach-Object {
 
         # Remove all other attributes except allowed style
         if ($node.Attributes.Count -gt 0) {
-            $node.Attributes
-            | Where-Object {
-                $_.Name -ne "style" -or $node.GetAttributeValue("style", "").ToLower() -ne "font-weight: bold;"
+            $toRemove = @()
+            foreach ($attr in $node.Attributes) {
+                if ($attr.Name -ne "style" -or $node.GetAttributeValue("style", "").ToLower() -ne "font-weight: bold;") {
+                    $toRemove += $attr.Name
+                }
             }
-            | ForEach-Object { $node.Attributes.Remove($_.Name) }
+            foreach ($name in $toRemove) {
+                $node.Attributes.Remove($name)
+            }
         }
     }
 
