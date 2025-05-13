@@ -6,25 +6,34 @@ $outputPath = "$env:TEMP\redacted_output.html"
 $hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
 Add-Type -Path $hpackDll
 
-# Read HTML
+# Read HTML and wrap
 $html = Get-Content $htmlPath -Raw -Encoding Default
-$html = "<html><body>" + $html + "</body></html>"  # Wrap if needed
+$html = "<html><body>" + $html + "</body></html>"
 
 # Load into HtmlAgilityPack
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Replace all inner text with Xs (skip script/style tags)
+# Define bullet detection pattern
+$bulletPattern = '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]?)\s*'
+
+# Process all text nodes (except inside script/style)
 $nodes = $doc.DocumentNode.SelectNodes("//*[not(self::script or self::style)]/text()")
 foreach ($textNode in $nodes) {
-    $original = $textNode.InnerText
-    $length = $original.Length
-    if ($length -gt 0) {
-        $redacted = 'X' * $length
-        $textNode.InnerHtml = $redacted
+    $text = $textNode.InnerText
+    if (-not [string]::IsNullOrWhiteSpace($text)) {
+        # Try to match leading bullet pattern
+        if ($text -match $bulletPattern) {
+            $bullet = $matches[1]
+            $redacted = $text -replace [regex]::Escape($bullet), ''
+            $redacted = $redacted -replace '.', 'X'
+            $textNode.InnerHtml = "$bullet$redacted"
+        } else {
+            $textNode.InnerHtml = $text -replace '.', 'X'
+        }
     }
 }
 
 # Save output
 $doc.DocumentNode.InnerHtml | Set-Content -Path $outputPath -Encoding UTF8
-Write-Output "Redacted HTML saved to: $outputPath"
+Write-Output "Redacted HTML (with bullets preserved) saved to: $outputPath"
