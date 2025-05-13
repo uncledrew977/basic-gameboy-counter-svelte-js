@@ -1,17 +1,17 @@
-# Paths
+# Input and output paths
 $htmlPath = "C:\Path\To\Test.html"
 $outputPath = "$env:TEMP\fixed_lists_cleaned.html"
 
-# Load HtmlAgilityPack DLL
+# Load HtmlAgilityPack DLL (adjust path to match your actual DLL location)
 $hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
 Add-Type -Path $hpackDll
 
-# Load the HTML
+# Load HTML content
 $html = Get-Content $htmlPath -Raw -Encoding UTF8
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Setup
+# Constants and state
 $indentUnit = 36
 $listStack = @()
 $outputBuilder = [ref] ''
@@ -30,20 +30,23 @@ function Open-List {
     $listStack += $type
 }
 
-function Is-Bullet($text) {
+function Is-Bullet {
+    param($text)
     return $text -match '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+'
 }
 
-function Strip-Bullet($text) {
+function Strip-Bullet {
+    param($text)
     return ($text -replace '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]|\•|\▪|\·)\s+', '').Trim()
 }
 
-# Process nodes
+# Process all <p> tags
 foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
     $class = $node.GetAttributeValue("class", "")
     $style = $node.GetAttributeValue("style", "")
     $text = $node.InnerText.Trim()
 
+    # Estimate nesting level
     $level = 0
     if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
         $margin = [double]$matches[1]
@@ -60,16 +63,16 @@ foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
         }
 
         $outputBuilder.Value += "<li>$cleanText</li>`n"
-        $node.Remove()  # Remove this <p> from the original doc
+        $node.Remove()  # remove list <p> from document
     }
 }
 
-# Close any remaining lists
+# Close remaining lists
 Close-Lists -targetLevel 0 -builder $outputBuilder
 
-# Add remaining non-list content
+# Add back any non-list HTML
 $outputBuilder.Value += $doc.DocumentNode.InnerHtml
 
 # Save result
 Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
-Write-Output "Cleaned HTML with lists saved to: $outputPath"
+Write-Output "✅ Cleaned HTML with proper list structure saved to: $outputPath"
