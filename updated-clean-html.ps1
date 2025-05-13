@@ -1,77 +1,85 @@
+# Path to HtmlAgilityPack.dll
+$hpackPath = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
+Add-Type -Path $hpackPath
 
-# Load HtmlAgilityPack
-Add-Type -Path "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.dll"
+# Input HTML path
+$inputPath = "C:\Path\To\Your\Input.html"
+$outputPath = "C:\Path\To\Your\Output.html"
 
-$inputPath = "C:\Path\To\Input\test (3).html"
-$outputPath = "C:\Path\To\Output\cleaned_test3.html"
+# Load HTML with proper encoding (Windows-1252)
+$encoding = [System.Text.Encoding]::GetEncoding("windows-1252")
+$htmlContent = Get-Content -Path $inputPath -Encoding Byte
+$decodedContent = $encoding.GetString($htmlContent)
 
-$html = Get-Content -Path $inputPath -Encoding Default -Raw
+# Load HTML into HtmlAgilityPack
 $doc = New-Object HtmlAgilityPack.HtmlDocument
-$doc.LoadHtml($html)
+$doc.LoadHtml($decodedContent)
 
-function Get-ListType {
-    param($text)
+# Create a new HTML document for clean output
+$cleanDoc = New-Object HtmlAgilityPack.HtmlDocument
+$body = $cleanDoc.CreateElement("body")
+$cleanDoc.DocumentNode.AppendChild($body)
 
-    if ($text -match '^\(?[ivxlc]+\)\.?$') { return "ol" }    # roman numerals
-    elseif ($text -match '^[a-zA-Z]\.$') { return "ol" }      # alphabetic
-    elseif ($text -match '^\d+\.$') { return "ol" }           # numeric
-    elseif ($text -match '^[•·▪]$') { return "ul" }           # bullet chars
-    else { return $null }
+# Regexes for bullet detection
+$bulletRegexes = @(
+    '^\s*(\d+)\.',         # 1., 2.
+    '^\s*([a-zA-Z])\.',    # a., b., A., B.
+    '^\s*(i{1,3}|iv|v|vi{0,3}|ix|x)\.' # i., ii., iii., iv., etc.
+)
+
+# Utility: Check if text is a bullet
+function Is-Bullet ($text) {
+    foreach ($regex in $bulletRegexes) {
+        if ($text -match $regex) {
+            return $true
+        }
+    }
+    return $false
 }
 
-function CleanNode {
-    param([HtmlAgilityPack.HtmlNode]$node, [HtmlAgilityPack.HtmlNode]$parent)
+# Process nodes
+$paragraphs = $doc.DocumentNode.SelectNodes("//p | //h1 | //h2 | //h3 | //table")
 
-    switch ($node.Name.ToLower()) {
-        "h1" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "h2" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "h3" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "h4" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "h5" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "h6" { $newNode = $node.Clone(); $parent.AppendChild($newNode) }
-        "p" {
-            $text = $node.InnerText.Trim()
-            if ($text -match '^(?<bullet>(\(?[ivxlc]+\)|[a-zA-Z]|\d+|[•·▪]))[\.\)]\s+(?<content>.+)') {
-                $bullet = $matches['bullet']
-                $content = $matches['content']
-                $listType = Get-ListType $bullet
-                if ($listType) {
-                    if (-not $script:currentList -or $script:currentList.Name -ne $listType) {
-                        $script:currentList = $doc.CreateElement($listType)
-                        $parent.AppendChild($script:currentList)
-                    }
-                    $li = $doc.CreateElement("li")
-                    $li.InnerHtml = $content
-                    $script:currentList.AppendChild($li)
-                    return
-                }
-            }
-            $script:currentList = $null
-            $newP = $doc.CreateElement("p")
-            $newP.InnerHtml = $node.InnerHtml
-            $parent.AppendChild($newP)
+$listStack = @()
+$currentList = $null
+
+foreach ($node in $paragraphs) {
+    $text = $node.InnerText.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        continue
+    }
+
+    if (Is-Bullet $text) {
+        if (-not $currentList) {
+            $currentList = $cleanDoc.CreateElement("ul")
+            $body.AppendChild($currentList)
         }
-        "table" {
-            $newTable = $node.Clone()
-            $parent.AppendChild($newTable)
+
+        # Remove bullet marker
+        $cleanText = $text -replace '^\s*\w+\.\s*', ''
+
+        $li = $cleanDoc.CreateElement("li")
+        $li.InnerHtml = $cleanText
+        $currentList.AppendChild($li)
+    }
+    else {
+        $currentList = $null
+
+        $tagName = $node.Name
+        if ($tagName -in @("h1", "h2", "h3", "table")) {
+            $imported = $cleanDoc.CreateElement($tagName)
+            $imported.InnerHtml = $node.InnerHtml
+            $body.AppendChild($imported)
         }
-        default {
-            foreach ($child in $node.ChildNodes) {
-                CleanNode -node $child -parent $parent
-            }
+        else {
+            $p = $cleanDoc.CreateElement("p")
+            $p.InnerHtml = $node.InnerHtml
+            $body.AppendChild($p)
         }
     }
 }
 
-$newDoc = New-Object HtmlAgilityPack.HtmlDocument
-$htmlElem = $newDoc.CreateElement("html")
-$bodyElem = $newDoc.CreateElement("body")
-$newDoc.DocumentNode.AppendChild($htmlElem)
-$htmlElem.AppendChild($bodyElem)
-
-$script:currentList = $null
-CleanNode -node $doc.DocumentNode.DocumentNode -parent $bodyElem
-
-# Save output
-$newDoc.Save($outputPath)
-Write-Host "Cleaned HTML saved to: $outputPath"
+# Save cleaned HTML
+$cleanDoc.Save($outputPath)
+Write-Host "Clean HTML saved to $outputPath"
