@@ -14,26 +14,24 @@ $html = "<html><body>" + $html + "</body></html>"
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Define bullet detection pattern
-$bulletPattern = '^\s*(\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.\)\:]?)\s*'
+# Bullet detection pattern (includes Roman numerals, dots, bullets)
+$bulletPattern = '^\s*((\(?[ivxlcdmIVXLCDM0-9a-zA-Z]{1,5}[\.\)\:]|[•▪·\.]))(\s+|(&nbsp;)+)'
 
-# Process all text nodes (except inside script/style)
+# Process all non-script/style text nodes
 $nodes = $doc.DocumentNode.SelectNodes("//*[not(self::script or self::style)]/text()")
 foreach ($textNode in $nodes) {
     $text = $textNode.InnerText
     if (-not [string]::IsNullOrWhiteSpace($text)) {
-        # Try to match leading bullet pattern
         if ($text -match $bulletPattern) {
             $bullet = $matches[1]
-            $redacted = $text -replace [regex]::Escape($bullet), ''
-            $redacted = $redacted -replace '.', 'X'
-            $textNode.InnerHtml = "$bullet$redacted"
+            $redactedRest = $text.Substring($matches[0].Length) -replace '.', 'X'
+            $textNode.InnerHtml = "$bullet$redactedRest"
         } else {
             $textNode.InnerHtml = $text -replace '.', 'X'
         }
     }
 }
 
-# Save output
+# Save redacted output
 $doc.DocumentNode.InnerHtml | Set-Content -Path $outputPath -Encoding UTF8
-Write-Output "Redacted HTML (with bullets preserved) saved to: $outputPath"
+Write-Output "Redacted HTML (with Roman numerals and bullets preserved) saved to: $outputPath"
