@@ -12,11 +12,11 @@ $html = Get-Content $htmlPath -Raw -Encoding Default
 # Wrap in body to ensure valid DOM
 $html = "<html><body>" + $html + "</body></html>"
 
-# Load HTML
+# Load HTML into HtmlAgilityPack
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Check paragraph count
+# Count <p> tags safely
 $paragraphs = $doc.DocumentNode.SelectNodes("//p")
 if ($paragraphs) {
     Write-Output "Paragraph count: $($paragraphs.Count)"
@@ -29,7 +29,7 @@ $indentUnit = 36
 $listStack = @()
 $outputBuilder = [ref] ''
 
-# Helpers
+# List handling helpers
 function Close-Lists {
     param([int]$targetLevel, [ref]$builder)
     while ($listStack.Count -gt $targetLevel) {
@@ -44,7 +44,7 @@ function Open-List {
     $listStack += $type
 }
 
-# Bullet detection using .InnerHtml
+# Bullet detection (non-breaking space safe)
 function Is-Bullet {
     param($text)
     return $text -match '^[ \t\u00A0]*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))[ \t\u00A0]+'
@@ -55,11 +55,49 @@ function Strip-Bullet {
     return ($text -replace '^[ \t\u00A0]*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))[ \t\u00A0]+', '').Trim()
 }
 
-# Process each <p> node
+# Process each paragraph
 foreach ($node in $paragraphs) {
     $class = $node.GetAttributeValue("class", "")
     $style = $node.GetAttributeValue("style", "")
-    
-    # Use .InnerHtml instead of .InnerText for better detection
+
+    # Strip HTML and normalize spaces
     $htmlText = $node.InnerHtml
-    $text = $htmlText -replace '<[^>]+>', '' -replace '&nbsp;',
+    $text = $htmlText -replace '<[^>]+>', '' -replace '&nbsp;', ' ' -replace ([char]160), ' ' -replace '\s+', ' '
+    $text = $text.Trim()
+
+    # Debug
+    Write-Output "`n---"
+    Write-Output "CLASS: $class"
+    Write-Output "TEXT: $text"
+    Write-Output "IS BULLET: $(Is-Bullet $text)"
+
+    # Estimate nesting level
+    $level = 0
+    if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
+        $margin = [double]$matches[1]
+        $level = [math]::Round($margin / $indentUnit)
+    }
+
+    if ($class -like "*MsoListParagraph*" -and (Is-Bullet $text)) {
+        $cleanText = Strip-Bullet $text
+        $listType = if ($text -match '^\s*\(?[0-9ivxlcdm]+\)?[\.):]') { "ol" } else { "ul" }
+
+        Close-Lists -targetLevel $level -builder $outputBuilder
+        if ($listStack.Count -lt ($level + 1)) {
+            Open-List -type $listType -builder $outputBuilder
+        }
+
+        $outputBuilder.Value += "<li>$cleanText</li>`n"
+        $node.Remove()
+    }
+}
+
+# Finalize list closure
+Close-Lists -targetLevel 0 -builder $outputBuilder
+
+# Append remaining non-list HTML
+$outputBuilder.Value += $doc.DocumentNode.InnerHtml
+
+# Save output
+Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
+Write-Output "Cleaned HTML with lists saved to: $outputPath"
