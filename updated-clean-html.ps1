@@ -2,28 +2,34 @@
 $htmlPath = "C:\Path\To\Test.html"
 $outputPath = "$env:TEMP\fixed_lists_cleaned_debug.html"
 
-# Load HtmlAgilityPack DLL (adjust if needed)
+# Load HtmlAgilityPack DLL
 $hpackDll = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
 Add-Type -Path $hpackDll
 
-# Read HTML (with correct encoding)
+# Read HTML using correct encoding
 $html = Get-Content $htmlPath -Raw -Encoding Default
 
-# Wrap HTML to ensure valid DOM structure
+# Wrap in body to ensure valid DOM
 $html = "<html><body>" + $html + "</body></html>"
 
-# Load with HtmlAgilityPack
+# Load HTML into HtmlAgilityPack
 $doc = New-Object HtmlAgilityPack.HtmlDocument
 $doc.LoadHtml($html)
 
-# Debug: how many paragraphs were found?
-Write-Output "Paragraph count: $($doc.DocumentNode.SelectNodes('//p')?.Count)"
+# Count <p> elements safely
+$paragraphs = $doc.DocumentNode.SelectNodes("//p")
+if ($paragraphs) {
+    Write-Output "Paragraph count: $($paragraphs.Count)"
+} else {
+    Write-Output "Paragraph count: 0 (no <p> elements found)"
+}
 
 # Constants
 $indentUnit = 36
 $listStack = @()
 $outputBuilder = [ref] ''
 
+# Helper functions
 function Close-Lists {
     param([int]$targetLevel, [ref]$builder)
     while ($listStack.Count -gt $targetLevel) {
@@ -38,29 +44,30 @@ function Open-List {
     $listStack += $type
 }
 
+# Supports normal + non-breaking spaces in bullet detection
 function Is-Bullet {
     param($text)
-    return $text -match '^\s*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))\s+'
+    return $text -match '^[ \t\u00A0]*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))[ \t\u00A0]+'
 }
 
 function Strip-Bullet {
     param($text)
-    return ($text -replace '^\s*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))\s+', '').Trim()
+    return ($text -replace '^[ \t\u00A0]*((\(?[a-zA-Z0-9ivxlcdm]{1,5}[\.):]|[•▪·]))[ \t\u00A0]+', '').Trim()
 }
 
-# Loop through all <p> nodes
-foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
+# Process paragraphs
+foreach ($node in $paragraphs) {
     $class = $node.GetAttributeValue("class", "")
     $style = $node.GetAttributeValue("style", "")
     $text = $node.InnerText.Trim()
 
-    # Debug output for each paragraph
+    # Debug output
     Write-Output "`n---"
     Write-Output "CLASS: $class"
     Write-Output "TEXT: $text"
     Write-Output "IS BULLET: $(Is-Bullet $text)"
 
-    # Estimate nesting level
+    # Indentation-based nesting
     $level = 0
     if ($style -match 'margin-left:\s*(\d+(\.\d+)?)pt') {
         $margin = [double]$matches[1]
@@ -81,12 +88,12 @@ foreach ($node in $doc.DocumentNode.SelectNodes("//p")) {
     }
 }
 
-# Close remaining lists
+# Close remaining open lists
 Close-Lists -targetLevel 0 -builder $outputBuilder
 
-# Add remaining HTML
+# Add remaining non-list HTML
 $outputBuilder.Value += $doc.DocumentNode.InnerHtml
 
 # Save output
 Set-Content -Path $outputPath -Value $outputBuilder.Value -Encoding UTF8
-Write-Output "✅ Cleaned HTML with debug saved to: $outputPath"
+Write-Output "Cleaned HTML with lists saved to: $outputPath"
