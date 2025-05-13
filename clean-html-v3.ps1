@@ -1,67 +1,91 @@
-# Load HtmlAgilityPack
-Add-Type -Path "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.dll"
+# Path to HtmlAgilityPack.dll
+$hpackPath = "C:\HtmlTools\HtmlAgilityPack\HtmlAgilityPack.1.11.46\lib\net45\HtmlAgilityPack.dll"
+Add-Type -Path $hpackPath
 
-$inputPath = "C:\Test\input.html"
-$outputPath = "C:\Test\cleaned_output.html"
+# Input/output paths
+$inputPath = "C:\Path\To\Your\Input.html"
+$outputPath = "C:\Path\To\Your\Output.html"
 
-# Load HTML content
-$htmlRaw = Get-Content $inputPath -Encoding Default -Raw
+# Load HTML with Windows-1252 encoding
+$encoding = [System.Text.Encoding]::GetEncoding("windows-1252")
+$htmlContent = Get-Content -Path $inputPath -Encoding Byte
+$decodedContent = $encoding.GetString($htmlContent)
+
+# Load HTML
 $doc = New-Object HtmlAgilityPack.HtmlDocument
-$doc.LoadHtml($htmlRaw)
+$doc.LoadHtml($decodedContent)
 
-# Detect list bullet patterns
-function IsBullet($text) {
-    return $text -match '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+'
+# Create clean output doc
+$cleanDoc = New-Object HtmlAgilityPack.HtmlDocument
+$body = $cleanDoc.CreateElement("body")
+$cleanDoc.DocumentNode.AppendChild($body)
+
+# Bullet regexes and list type inference
+$bulletTypes = @(
+    @{ Regex = '^\s*(\d+)\.'; Type = '1' },
+    @{ Regex = '^\s*([a-z])\.'; Type = 'a' },
+    @{ Regex = '^\s*([A-Z])\.'; Type = 'A' },
+    @{ Regex = '^\s*(i{1,3}|iv|v|vi{0,3}|ix|x)\.'; Type = 'i' }  # Lowercase roman
+)
+
+function Get-ListType ($text) {
+    foreach ($entry in $bulletTypes) {
+        if ($text -match $entry.Regex) {
+            return $entry.Type
+        }
+    }
+    return $null
 }
 
-function CleanBullet($html) {
-    return $html -replace '^\s*((\d+|[a-z]{1,3}|[ivxlc]{1,4})[\.\)]|•|·)\s+', ''
-}
+$paragraphs = $doc.DocumentNode.SelectNodes("//p | //h1 | //h2 | //h3 | //table")
+$currentList = $null
+$currentListType = $null
 
-function GetIndentLevel($html) {
-    return ($html -split '&nbsp;').Count - 1
-}
+foreach ($node in $paragraphs) {
+    $text = $node.InnerText.Trim()
 
-# Process all <p> elements
-$pNodes = $doc.DocumentNode.SelectNodes("//p")
-if ($pNodes) {
-    $listStack = @()
-    $lastIndent = -1
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        continue
+    }
 
-    foreach ($p in $pNodes) {
-        $text = $p.InnerText.Trim()
-        $html = $p.InnerHtml
+    $detectedType = Get-ListType $text
 
-        if (IsBullet $text) {
-            $indent = GetIndentLevel $html
-            $listType = if ($text -match '^\s*\d+[\.\)]') { "ol" } else { "ul" }
+    if ($detectedType) {
+        # Start new list if type changes
+        if ($null -eq $currentList -or $currentListType -ne $detectedType) {
+            $currentList = $cleanDoc.CreateElement("ol")
+            $currentList.SetAttributeValue("type", $detectedType)
+            $body.AppendChild($currentList)
+            $currentListType = $detectedType
+        }
 
-            while ($listStack.Count -gt 0 -and $indent -le $listStack[-1].Indent) {
-                $listStack[-1].ListNode = $listStack[-1].ListNode.ParentNode
-                $listStack.Pop() | Out-Null
-            }
+        # Remove bullet marker
+        $cleanText = $text -replace '^\s*\S+\.\s*', ''
 
-            if ($listStack.Count -eq 0 -or $indent -gt $lastIndent) {
-                $newList = $doc.CreateElement($listType)
-                $p.ParentNode.InsertBefore($newList, $p)
-                $listStack.Push([PSCustomObject]@{ ListNode = $newList; Indent = $indent })
-            }
+        $li = $cleanDoc.CreateElement("li")
+        $li.InnerHtml = $cleanText
+        $currentList.AppendChild($li)
+    }
+    else {
+        # Close list if needed
+        $currentList = $null
+        $currentListType = $null
 
-            $li = $doc.CreateElement("li")
-            $li.InnerHtml = CleanBullet $html
-            $listStack[-1].ListNode.AppendChild($li)
-            $p.Remove()
-            $lastIndent = $indent
+        # Preserve structural tags
+        $tagName = $node.Name
+        if ($tagName -in @("h1", "h2", "h3", "table")) {
+            $copy = $cleanDoc.CreateElement($tagName)
+            $copy.InnerHtml = $node.InnerHtml
+            $body.AppendChild($copy)
+        }
+        else {
+            $p = $cleanDoc.CreateElement("p")
+            $p.InnerHtml = $node.InnerHtml
+            $body.AppendChild($p)
         }
     }
 }
 
-# Remove style/class attributes AFTER bullet conversion
-$doc.DocumentNode.Descendants() | ForEach-Object {
-    $_.Attributes.Remove("style")
-    $_.Attributes.Remove("class")
-}
-
-# Save the cleaned HTML
-$doc.Save($outputPath)
+# Save result
+$cleanDoc.Save($outputPath)
 Write-Host "Clean HTML saved to $outputPath"
