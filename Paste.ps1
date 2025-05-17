@@ -1,26 +1,13 @@
-function Remove-EmptyElementsRecursively {
-    param([HtmlAgilityPack.HtmlNode]$rootNode)
+$headNode = $doc.DocumentNode.SelectSingleNode("//head")
+if ($headNode -ne $null) {
+    foreach ($child in @($headNode.ChildNodes)) {
+        $text = $child.InnerHtml
 
-    $removedAny = $false
-    $nodes = $rootNode.SelectNodes(".//*")
-    if ($nodes) {
-        foreach ($node in $nodes | Sort-Object { $_.XPath.Length } -Descending) {
-            # Skip any node that has attributes (like <link rel="..."> or <img src="...">)
-            if ($node.Attributes.Count -gt 0) {
-                continue
-            }
+        if ($text -match '<script[^>]*language\s*=\s*["'']?javascript["'']?[^>]*>.*?</script>' -or
+            $text -match 'function\s+\w+\s*\(' -or
+            $text -match '<!--\s*function') {
 
-            $text = $node.InnerText -replace '[\u00A0\u200B\s]+', '' -replace '&nbsp;', ''
-            $hasMeaningfulChildren = $node.ChildNodes | Where-Object {
-                $_.NodeType -ne 'Text' -and $_.Name -ne "#text"
-            }
-
-            if (-not $hasMeaningfulChildren -and [string]::IsNullOrWhiteSpace($text)) {
-                $node.ParentNode.RemoveChild($node)
-                $removedAny = $true
-            }
+            $headNode.RemoveChild($child)
         }
     }
-
-    return $removedAny
 }
