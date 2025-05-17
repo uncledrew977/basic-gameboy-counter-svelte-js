@@ -1,54 +1,62 @@
-# Create Word application
+# Launch Word
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 
-# Open the Word document
+# Open DOCX
 $docPath = "C:\Path\To\Your\Document.docx"
 $doc = $word.Documents.Open($docPath)
 
-# Define indent per level in points
+# Bullet indents (points) per level
 $indentMap = @{
     1 = 25
-    2 = 40
-    3 = 55
-    4 = 70
-    5 = 85
+    2 = 50
+    3 = 75
+    4 = 100
+    5 = 125
 }
 
-# Loop through paragraphs
+# Create a fresh bullet list template
+$template = $word.ListGalleries.Item(1).ListTemplates.Item(1)  # 1 = bulleted lists
+
+# Loop through all paragraphs
 foreach ($para in $doc.Paragraphs) {
     $range = $para.Range
     $listFormat = $range.ListFormat
 
+    # Check if it's a list item
     if ($listFormat.ListType -ne 0) {
         $level = $listFormat.ListLevelNumber
 
         if ($indentMap.ContainsKey($level)) {
             $indent = $indentMap[$level]
 
-            # Apply paragraph indent
-            $range.ParagraphFormat.LeftIndent = $indent
-            $range.ParagraphFormat.FirstLineIndent = -18  # Optional: hanging indent
+            # Force the list to reapply using our bullet template
+            $listFormat.ApplyListTemplateWithLevel(
+                $template,
+                $ContinuePreviousList = $true,
+                $DefaultListBehavior = 1,
+                $ApplyLevel = $level
+            )
 
-            # Force list level properties (Word often overrides paragraph indents without this)
-            $template = $listFormat.ListTemplate
-            if ($template -ne $null) {
-                $listLevel = $template.ListLevels.Item($level)
-                $listLevel.NumberFormat = $listLevel.NumberFormat  # Preserve format
-                $listLevel.Alignment = 0  # Left
-                $listLevel.NumberPosition = 0
-                $listLevel.TextPosition = $indent
-                $listLevel.TabPosition = $indent
-            }
+            # Force list level indent properties
+            $listLevel = $template.ListLevels.Item($level)
+            $listLevel.NumberPosition = 0
+            $listLevel.TextPosition = $indent
+            $listLevel.TabPosition = $indent
+            $listLevel.Alignment = 0  # Left aligned
+
+            # Apply paragraph indent and optional hanging indent
+            $range.ParagraphFormat.LeftIndent = $indent
+            $range.ParagraphFormat.FirstLineIndent = -18
         }
     }
 }
 
-# Save the document
+# Save updated doc
 $doc.Save()
 
-# Optional: Export to Filtered HTML
-# $doc.SaveAs([ref] "C:\Path\To\Output.html", [ref] 10)
+# OPTIONAL: Export to filtered HTML (shows margin-left)
+# $doc.SaveAs([ref] "C:\Path\To\Output.html", [ref] 10)  # 10 = wdFormatFilteredHTML
 
 # Clean up
 $doc.Close()
