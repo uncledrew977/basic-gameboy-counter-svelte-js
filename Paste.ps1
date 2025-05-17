@@ -15,50 +15,41 @@ $indentMap = @{
     5 = 125
 }
 
-# Create a fresh bullet list template
-$template = $word.ListGalleries.Item(1).ListTemplates.Item(1)  # 1 = bulleted lists
+# Get bullet list template
+$template = $word.ListGalleries.Item(1).ListTemplates.Item(1)  # 1 = bulleted list gallery
 
 # Loop through all paragraphs
 foreach ($para in $doc.Paragraphs) {
     $range = $para.Range
     $listFormat = $range.ListFormat
 
-    # Check if it's a list item
     if ($listFormat.ListType -ne 0) {
         $level = $listFormat.ListLevelNumber
 
         if ($indentMap.ContainsKey($level)) {
             $indent = $indentMap[$level]
 
-            # Force the list to reapply using our bullet template
-            $listFormat.ApplyListTemplateWithLevel(
-                $template,
-                $ContinuePreviousList = $true,
-                $DefaultListBehavior = 1,
-                $ApplyLevel = $level
-            )
+            # Corrected method call without named arguments
+            $listFormat.ApplyListTemplateWithLevel($template, $true, 1, $level)
 
-            # Force list level indent properties
+            # Adjust template list level formatting
             $listLevel = $template.ListLevels.Item($level)
             $listLevel.NumberPosition = 0
             $listLevel.TextPosition = $indent
             $listLevel.TabPosition = $indent
-            $listLevel.Alignment = 0  # Left aligned
+            $listLevel.Alignment = 0
 
-            # Apply paragraph indent and optional hanging indent
+            # Apply paragraph indent and hanging indent
             $range.ParagraphFormat.LeftIndent = $indent
             $range.ParagraphFormat.FirstLineIndent = -18
         }
     }
 }
 
-# Save updated doc
+# Save and cleanup
 $doc.Save()
+# Optional: $doc.SaveAs([ref] "C:\Path\To\Output.html", [ref] 10)
 
-# OPTIONAL: Export to filtered HTML (shows margin-left)
-# $doc.SaveAs([ref] "C:\Path\To\Output.html", [ref] 10)  # 10 = wdFormatFilteredHTML
-
-# Clean up
 $doc.Close()
 $word.Quit()
 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null
