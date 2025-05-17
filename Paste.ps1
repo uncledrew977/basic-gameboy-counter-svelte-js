@@ -4,9 +4,11 @@ function Remove-EmptyElementsRecursively {
     $removedAny = $false
     $nodes = $rootNode.SelectNodes(".//*")
     if ($nodes) {
-        # Process from bottom-up so we handle child-empty-parent chains
         foreach ($node in $nodes | Sort-Object { $_.XPath.Length } -Descending) {
-            if ($node.Name -in @("img", "br", "hr")) { continue }
+            # Skip any node that has attributes (like <link rel="..."> or <img src="...">)
+            if ($node.Attributes.Count -gt 0) {
+                continue
+            }
 
             $text = $node.InnerText -replace '[\u00A0\u200B\s]+', '' -replace '&nbsp;', ''
             $hasMeaningfulChildren = $node.ChildNodes | Where-Object {
@@ -22,8 +24,3 @@ function Remove-EmptyElementsRecursively {
 
     return $removedAny
 }
-
-# Run the cleanup until nothing else is removed (recursive upward pass)
-do {
-    $more = Remove-EmptyElementsRecursively -rootNode $doc.DocumentNode
-} while ($more)
